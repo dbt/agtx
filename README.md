@@ -2,18 +2,31 @@
 
 [//]: <img src="https://github.com/user-attachments/assets/54ac039b-085e-490b-aacc-36c8e244e313" width="428" />
 
-<img width="1486" height="680" src="https://github.com/user-attachments/assets/45858e09-ab61-422b-b708-db060c73a900" />
+# agtx
+### Run and manage multi-agent AI coding workflows in the terminal
+Let different AI coding agents collaborate on the same task.  
 
-## Run and manage multi-agent AI coding workflows from a single terminal board
-Let different AI coding agents collaborate on the same task. **Gemini → research → Claude → implement → Codex → review.**  
-Plug in any existing spec-driven development framework or specify your own workflow as a custom plugin with per-phase skills, prompts, artifact tracking and autonomous execution.
+**Gemini → research**  
+**Claude → implement**  
+**Codex → review**  
 
+Plug in any existing spec-driven development framework or specify a custom plugin with per-phase skills,  
+prompts, artifact tracking and autonomous execution.
+
+<br/>
+
+<img width="840" src="https://github.com/user-attachments/assets/45858e09-ab61-422b-b708-db060c73a900" />
+
+[//]:  <img width="840" src="https://github.com/user-attachments/assets/42f71a6c-424c-4cc4-80fc-dc9bb8ba1467" />
+
+<br/>
 
 [//]: <img width="1486" height="680" src="https://github.com/user-attachments/assets/45858e09-ab61-422b-b708-db060c73a900" />
 
+[//]: <![Xnapper-2026-02-14-09 36 33 (1)](https://github.com/user-attachments/assets/fce21a9c-2fe1-4b14-8f24-55e058531370)>
+
 </div>
 
-[//]: <![Xnapper-2026-02-14-09 36 33 (1)](https://github.com/user-attachments/assets/fce21a9c-2fe1-4b14-8f24-55e058531370)>
 
 ## Features
 
@@ -21,7 +34,7 @@ Plug in any existing spec-driven development framework or specify your own workf
 - **Multi-agent task lifecycle**: Configure different agents per workflow phase — e.g. Gemini for planning, Claude for implementation, Codex for review — with automatic agent switching in the same tmux window
 - **Git worktree and tmux isolation**: Each task gets its own worktree and tmux window, keeping work separated
 - **Spec-driven development plugins**: Plug in any spec-driven development framework or select from a predefined set of plugins like GSD, Spec-kit or OpenSpec — or define custom skills, prompts and artifact tracking - with automatic execution and tracking at each phase
-- **Multi-agent per task**: Configure different agents per workflow phase — e.g. Gemini for planning, Claude for implementation, Codex for review — with automatic agent switching in the same tmux window
+- **Supported coding agents**: [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/sst/opencode), [Copilot](https://github.com/github/copilot-cli)
 
 ## Installation
 
@@ -41,8 +54,7 @@ cp target/release/agtx ~/.local/bin/
 ### Requirements
 
 - **tmux** - Agent sessions run in a dedicated tmux server
-- **gh** - GitHub CLI for PR operations
-- Supported coding agents: [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/sst/opencode), [Copilot](https://github.com/github/copilot-cli)
+- **gh** (optional) - GitHub CLI for PR operations
 
 ## Quick Start
 
@@ -151,6 +163,8 @@ Press `P` to activate a plugin for the current project. The active plugin is sho
 | **gsd** | [Get Shit Done](https://github.com/fynnfluegge/get-shit-done-cc) - structured spec-driven development with interactive planning |
 | **spec-kit** | [Spec-Driven Development](https://github.com/github/spec-kit) by GitHub - specifications become executable artifacts |
 | **openspec** | [OpenSpec](https://github.com/Fission-AI/OpenSpec) - lightweight AI-guided specification framework |
+| **bmad** | [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) - AI-driven agile development with structured phases |
+| **superpowers** | [Superpowers](https://github.com/obra/superpowers) - brainstorming, plans, TDD, subagent-driven development |
 
 ### Agent Compatibility
 
@@ -166,6 +180,8 @@ Commands are written once in canonical format and automatically translated per a
 | **gsd** | ✅ | ✅ | ✅ | ❌ | ✅ |
 | **spec-kit** | ✅ | ✅ | ✅ | 🟡 | ✅ |
 | **openspec** | ✅ | ✅ | ✅ | 🟡 | ✅ |
+| **bmad** | ✅ | ✅ | ✅ | 🟡 | ✅ |
+| **superpowers** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **void** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ✅ Skills, commands, and prompts fully supported · 🟡 Prompt only, no interactive skill support · ❌ Not supported
