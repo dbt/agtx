@@ -20,6 +20,10 @@ pub struct GlobalConfig {
     /// UI theme/colors
     #[serde(default)]
     pub theme: ThemeConfig,
+
+    /// Enable emacs-style keybindings in text inputs (Ctrl+A/E/B/F/D/K/U/W)
+    #[serde(default)]
+    pub emacs_bindings: bool,
 }
 
 impl Default for GlobalConfig {
@@ -29,6 +33,7 @@ impl Default for GlobalConfig {
             agents: PhaseAgentsConfig::default(),
             worktree: WorktreeConfig::default(),
             theme: ThemeConfig::default(),
+            emacs_bindings: false,
         }
     }
 }
@@ -327,6 +332,7 @@ pub struct MergedConfig {
     pub copy_files: Option<String>,
     pub init_script: Option<String>,
     pub workflow_plugin: Option<String>,
+    pub emacs_bindings: bool,
 }
 
 impl MergedConfig {
@@ -355,6 +361,7 @@ impl MergedConfig {
             copy_files: project.copy_files.clone(),
             init_script: project.init_script.clone(),
             workflow_plugin: project.workflow_plugin.clone(),
+            emacs_bindings: global.emacs_bindings,
         }
     }
 

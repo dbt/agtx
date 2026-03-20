@@ -3033,7 +3033,7 @@ impl App {
                 }
                 _ => {
                     // Forward all other keys to tmux window (including Esc)
-                    send_key_to_tmux(&window_name, key.code, self.state.tmux_ops.as_ref());
+                    send_key_to_tmux(&window_name, key, self.state.tmux_ops.as_ref());
                     // After sending a key, refresh content to show the result
                     popup.cached_content = capture_tmux_pane_with_history(
                         &window_name,
@@ -3294,7 +3294,58 @@ impl App {
         Ok(())
     }
 
+    /// Handle emacs-style keybindings for `input_buffer`/`input_cursor`.
+    /// Returns true if the key was consumed. Line-aware logic works for both
+    /// single-line (title) and multi-line (description) buffers.
+    fn handle_emacs_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
+        use crossterm::event::KeyModifiers;
+        if !self.state.config.emacs_bindings {
+            return false;
+        }
+        if !key.modifiers.contains(KeyModifiers::CONTROL) {
+            return false;
+        }
+        let buf = &self.state.input_buffer;
+        let pos = self.state.input_cursor;
+        match key.code {
+            KeyCode::Char('a') => {
+                self.state.input_cursor = buf[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+            }
+            KeyCode::Char('e') => {
+                self.state.input_cursor = buf[pos..].find('\n').map(|p| pos + p).unwrap_or(buf.len());
+            }
+            KeyCode::Char('b') => {
+                if pos > 0 { self.state.input_cursor -= 1; }
+            }
+            KeyCode::Char('f') => {
+                if pos < self.state.input_buffer.len() { self.state.input_cursor += 1; }
+            }
+            KeyCode::Char('d') => {
+                if pos < self.state.input_buffer.len() { self.state.input_buffer.remove(pos); }
+            }
+            KeyCode::Char('k') => {
+                let end = buf[pos..].find('\n').map(|p| pos + p).unwrap_or(buf.len());
+                self.state.input_buffer.drain(pos..end);
+            }
+            KeyCode::Char('u') => {
+                let start = self.state.input_buffer[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+                self.state.input_buffer.drain(start..pos);
+                self.state.input_cursor = start;
+            }
+            KeyCode::Char('w') => {
+                let new_pos = word_boundary_left(&self.state.input_buffer, pos);
+                self.state.input_buffer.drain(new_pos..pos);
+                self.state.input_cursor = new_pos;
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn handle_title_input(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        if self.handle_emacs_key(key) {
+            return Ok(());
+        }
         let has_alt = key.modifiers.contains(crossterm::event::KeyModifiers::ALT);
         match key.code {
             KeyCode::Esc => {
@@ -3632,6 +3683,10 @@ impl App {
                 }
                 _ => {}
             }
+            return Ok(());
+        }
+
+        if self.handle_emacs_key(key) {
             return Ok(());
         }
 
@@ -6603,8 +6658,13 @@ fn push_changes_to_existing_pr(
 }
 
 /// Send a key to a tmux pane
-fn send_key_to_tmux(window_name: &str, key: KeyCode, tmux_ops: &dyn TmuxOperations) {
-    let key_str = match key {
+fn send_key_to_tmux(window_name: &str, key: crossterm::event::KeyEvent, tmux_ops: &dyn TmuxOperations) {
+    use crossterm::event::KeyModifiers;
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt  = key.modifiers.contains(KeyModifiers::ALT);
+
+    // Build the base key name in tmux notation
+    let base = match key.code {
         KeyCode::Char(c) => c.to_string(),
         KeyCode::Enter => "Enter".to_string(),
         KeyCode::Esc => "Escape".to_string(),
@@ -6622,6 +6682,14 @@ fn send_key_to_tmux(window_name: &str, key: KeyCode, tmux_ops: &dyn TmuxOperatio
         KeyCode::Insert => "IC".to_string(),
         KeyCode::F(n) => format!("F{}", n),
         _ => return,
+    };
+
+    // Apply modifier prefixes using tmux key notation (C- and M-)
+    let key_str = match (ctrl, alt) {
+        (true, true)  => format!("C-M-{}", base),
+        (true, false) => format!("C-{}", base),
+        (false, true) => format!("M-{}", base),
+        (false, false) => base,
     };
 
     let _ = tmux_ops.send_keys_literal(window_name, &key_str);

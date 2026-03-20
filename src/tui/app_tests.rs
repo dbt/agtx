@@ -690,7 +690,7 @@ fn test_send_key_to_tmux_char() {
         .times(1)
         .returning(|_, _| Ok(()));
 
-    send_key_to_tmux("test-window", KeyCode::Char('a'), &mock_tmux);
+    send_key_to_tmux("test-window", crossterm::event::KeyEvent::new(KeyCode::Char('a'), crossterm::event::KeyModifiers::NONE), &mock_tmux);
 }
 
 /// Test sending Enter key to tmux
@@ -708,7 +708,7 @@ fn test_send_key_to_tmux_enter() {
         .times(1)
         .returning(|_, _| Ok(()));
 
-    send_key_to_tmux("test-window", KeyCode::Enter, &mock_tmux);
+    send_key_to_tmux("test-window", crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE), &mock_tmux);
 }
 
 /// Test sending special keys to tmux
@@ -726,7 +726,7 @@ fn test_send_key_to_tmux_special_keys() {
         )
         .returning(|_, _| Ok(()));
 
-    send_key_to_tmux("win", KeyCode::Esc, &mock_tmux);
+    send_key_to_tmux("win", crossterm::event::KeyEvent::new(KeyCode::Esc, crossterm::event::KeyModifiers::NONE), &mock_tmux);
 
     // Test Backspace
     let mut mock_tmux2 = MockTmuxOperations::new();
@@ -738,7 +738,7 @@ fn test_send_key_to_tmux_special_keys() {
         )
         .returning(|_, _| Ok(()));
 
-    send_key_to_tmux("win", KeyCode::Backspace, &mock_tmux2);
+    send_key_to_tmux("win", crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE), &mock_tmux2);
 }
 
 /// Test sending function key to tmux
@@ -752,7 +752,7 @@ fn test_send_key_to_tmux_function_key() {
         .with(mockall::predicate::eq("win"), mockall::predicate::eq("F5"))
         .returning(|_, _| Ok(()));
 
-    send_key_to_tmux("win", KeyCode::F(5), &mock_tmux);
+    send_key_to_tmux("win", crossterm::event::KeyEvent::new(KeyCode::F(5), crossterm::event::KeyModifiers::NONE), &mock_tmux);
 }
 
 // =============================================================================
