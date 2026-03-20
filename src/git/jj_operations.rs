@@ -85,18 +85,19 @@ impl GitOperations for RealJjOps {
         Ok(())
     }
 
-    fn diff(&self, worktree_path: &Path) -> String {
+    fn diff(&self, _worktree_path: &Path) -> String {
+        // jj has no staging area — everything is auto-tracked, nothing is "unstaged"
+        String::new()
+    }
+
+    fn diff_cached(&self, worktree_path: &Path) -> String {
+        // jj has no staging area — everything is effectively "staged"
         Command::new("jj")
             .current_dir(worktree_path)
             .args(["diff", "--git"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
             .unwrap_or_default()
-    }
-
-    fn diff_cached(&self, worktree_path: &Path) -> String {
-        // jj has no staging area — return the full working-copy diff
-        self.diff(worktree_path)
     }
 
     fn list_untracked_files(&self, _worktree_path: &Path) -> String {
