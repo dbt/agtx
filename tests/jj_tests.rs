@@ -266,7 +266,7 @@ fn test_jj_has_changes_true_after_file_write() {
 }
 
 #[test]
-fn test_jj_diff_empty_on_clean_workspace() {
+fn test_jj_diff_always_empty() {
     if !jj_available() { return; }
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
@@ -274,27 +274,16 @@ fn test_jj_diff_empty_on_clean_workspace() {
     let ws = ops.create_worktree(temp_dir.path(), "diff-clean").unwrap();
     let ws_path = Path::new(&ws);
 
+    // jj has no staging area — nothing is ever "unstaged"
+    assert!(ops.diff(ws_path).is_empty());
+
+    // still empty even with working-copy changes
+    std::fs::write(ws_path.join("feature.txt"), "new feature").unwrap();
     assert!(ops.diff(ws_path).is_empty());
 }
 
 #[test]
-fn test_jj_diff_shows_changes() {
-    if !jj_available() { return; }
-    let temp_dir = setup_jj_repo();
-    let ops = RealJjOps;
-
-    let ws = ops.create_worktree(temp_dir.path(), "diff-dirty").unwrap();
-    let ws_path = Path::new(&ws);
-
-    std::fs::write(ws_path.join("feature.txt"), "new feature").unwrap();
-
-    let diff = ops.diff(ws_path);
-    assert!(!diff.is_empty());
-    assert!(diff.contains("feature.txt"));
-}
-
-#[test]
-fn test_jj_diff_cached_matches_diff() {
+fn test_jj_diff_cached_shows_changes() {
     if !jj_available() { return; }
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
@@ -302,10 +291,14 @@ fn test_jj_diff_cached_matches_diff() {
     let ws = ops.create_worktree(temp_dir.path(), "diff-cached").unwrap();
     let ws_path = Path::new(&ws);
 
-    std::fs::write(ws_path.join("staged.txt"), "content").unwrap();
+    // clean workspace — no staged changes yet
+    assert!(ops.diff_cached(ws_path).is_empty());
 
-    // jj has no staging area — diff_cached should equal diff
-    assert_eq!(ops.diff(ws_path), ops.diff_cached(ws_path));
+    // after a file write, diff_cached shows the full working-copy diff
+    std::fs::write(ws_path.join("staged.txt"), "content").unwrap();
+    let diff = ops.diff_cached(ws_path);
+    assert!(!diff.is_empty());
+    assert!(diff.contains("staged.txt"));
 }
 
 #[test]
