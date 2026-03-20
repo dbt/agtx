@@ -166,6 +166,12 @@ pub struct WorktreeConfig {
     /// Base branch to create worktrees from (empty = auto-detect main/master)
     #[serde(default)]
     pub base_branch: String,
+
+    /// Optional global directory for all worktrees, regardless of project.
+    /// Overrides the default per-project `.agtx/worktrees/` location.
+    /// Supports `~` for home directory. Example: "~/worktrees"
+    #[serde(default)]
+    pub worktree_dir: Option<String>,
 }
 
 impl Default for WorktreeConfig {
@@ -173,13 +179,27 @@ impl Default for WorktreeConfig {
         Self {
             enabled: true,
             auto_cleanup: true,
-            base_branch: String::new(),
+            base_branch: "main".to_string(),
+            worktree_dir: None,
         }
     }
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_base_branch() -> String {
+    "main".to_string()
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(path)
 }
 
 /// Project-specific configuration (stored in .agtx/config.toml)
@@ -322,6 +342,7 @@ pub struct MergedConfig {
     pub worktree_enabled: bool,
     pub auto_cleanup: bool,
     pub base_branch: String,
+    pub worktree_dir: Option<PathBuf>,
     pub github_url: Option<String>,
     pub theme: ThemeConfig,
     pub copy_files: Option<String>,
@@ -350,6 +371,7 @@ impl MergedConfig {
                 .base_branch
                 .clone()
                 .unwrap_or_else(|| global.worktree.base_branch.clone()),
+            worktree_dir: global.worktree.worktree_dir.as_deref().map(expand_tilde),
             github_url: project.github_url.clone(),
             theme: global.theme.clone(),
             copy_files: project.copy_files.clone(),

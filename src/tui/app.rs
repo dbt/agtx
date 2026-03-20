@@ -4275,6 +4275,7 @@ impl App {
         let base_branch = self.state.config.base_branch.clone();
         let copy_files = self.state.config.copy_files.clone();
         let init_script = self.state.config.init_script.clone();
+        let worktree_dir = self.state.config.worktree_dir.clone();
         let tmux_ops = Arc::clone(&self.state.tmux_ops);
         let git_ops = Arc::clone(&self.state.git_ops);
         let agent_ops = self.state.agent_registry.get(&planning_agent);
@@ -4333,6 +4334,7 @@ impl App {
                 git_ops.as_ref(),
                 agent_ops.as_ref(),
                 &referenced_tasks,
+                worktree_dir,
             );
 
             match result {
@@ -4609,6 +4611,7 @@ impl App {
         let base_branch = self.state.config.base_branch.clone();
         let copy_files = self.state.config.copy_files.clone();
         let init_script = self.state.config.init_script.clone();
+        let worktree_dir = self.state.config.worktree_dir.clone();
 
         let tmux_ops = Arc::clone(&self.state.tmux_ops);
         let git_ops = Arc::clone(&self.state.git_ops);
@@ -4647,6 +4650,7 @@ impl App {
                 git_ops.as_ref(),
                 agent_ops.as_ref(),
                 &[],
+                worktree_dir,
             );
 
             match result {
@@ -4807,6 +4811,7 @@ impl App {
         let base_branch = self.state.config.base_branch.clone();
         let copy_files = self.state.config.copy_files.clone();
         let init_script = self.state.config.init_script.clone();
+        let worktree_dir = self.state.config.worktree_dir.clone();
         let tmux_ops = Arc::clone(&self.state.tmux_ops);
         let git_ops = Arc::clone(&self.state.git_ops);
         let agent_ops = self.state.agent_registry.get(&running_agent);
@@ -4840,6 +4845,7 @@ impl App {
                 git_ops.as_ref(),
                 agent_ops.as_ref(),
                 &[],
+                worktree_dir,
             );
 
             match result {
@@ -6201,22 +6207,26 @@ fn setup_task_worktree(
     git_ops: &dyn GitOperations,
     agent_ops: &dyn AgentOperations,
     referenced_tasks: &[ReferencedTaskInfo],
+    worktree_dir: Option<PathBuf>,
 ) -> Result<String> {
     let unique_slug = generate_task_slug(&task.id, &task.title);
     let window_name = format!("task-{}", unique_slug);
     let target = format!("{}:{}", tmux_project_name, window_name);
 
     // Create git worktree from the configured base branch
-    let worktree_path_str = match git_ops.create_worktree(project_path, &unique_slug, base_branch) {
+    let worktree_path_str = match git_ops.create_worktree_at(project_path, &unique_slug, base_branch, worktree_dir.clone()) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("Failed to create worktree: {}", e);
-            project_path
-                .join(".agtx")
-                .join("worktrees")
-                .join(&unique_slug)
-                .to_string_lossy()
-                .to_string()
+            match &worktree_dir {
+                Some(base) => base.join(&unique_slug),
+                None => project_path
+                    .join(".agtx")
+                    .join("worktrees")
+                    .join(&unique_slug),
+            }
+            .to_string_lossy()
+            .to_string()
         }
     };
 

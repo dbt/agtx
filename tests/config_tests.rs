@@ -291,3 +291,60 @@ default_agent = "claude"
     assert_eq!(config.agents.running, None);
     assert_eq!(config.agents.review, None);
 }
+
+// === WorktreeConfig / worktree_dir Tests ===
+
+#[test]
+fn test_worktree_config_default_has_no_dir() {
+    let config = WorktreeConfig::default();
+    assert!(config.worktree_dir.is_none());
+}
+
+#[test]
+fn test_worktree_config_parses_dir() {
+    let toml_str = r#"
+[worktree]
+worktree_dir = "/tmp/my-worktrees"
+"#;
+    let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.worktree.worktree_dir.as_deref(), Some("/tmp/my-worktrees"));
+}
+
+#[test]
+fn test_worktree_config_missing_dir_is_none() {
+    let toml_str = r#"
+[worktree]
+base_branch = "main"
+"#;
+    let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+    assert!(config.worktree.worktree_dir.is_none());
+}
+
+#[test]
+fn test_merged_config_worktree_dir_none_by_default() {
+    let global = GlobalConfig::default();
+    let project = ProjectConfig::default();
+    let merged = MergedConfig::merge(&global, &project);
+    assert!(merged.worktree_dir.is_none());
+}
+
+#[test]
+fn test_merged_config_worktree_dir_absolute_path() {
+    use std::path::PathBuf;
+    let mut global = GlobalConfig::default();
+    global.worktree.worktree_dir = Some("/tmp/worktrees".to_string());
+    let project = ProjectConfig::default();
+    let merged = MergedConfig::merge(&global, &project);
+    assert_eq!(merged.worktree_dir, Some(PathBuf::from("/tmp/worktrees")));
+}
+
+#[test]
+fn test_merged_config_worktree_dir_tilde_expanded() {
+    use std::path::PathBuf;
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
+    let mut global = GlobalConfig::default();
+    global.worktree.worktree_dir = Some("~/worktrees".to_string());
+    let project = ProjectConfig::default();
+    let merged = MergedConfig::merge(&global, &project);
+    assert_eq!(merged.worktree_dir, Some(PathBuf::from(&home).join("worktrees")));
+}

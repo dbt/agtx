@@ -10,15 +10,18 @@ use super::operations::GitOperations;
 const AGTX_DIR: &str = ".agtx";
 const WORKTREES_DIR: &str = "worktrees";
 
-fn worktree_path(project_path: &Path, task_slug: &str) -> PathBuf {
-    project_path.join(AGTX_DIR).join(WORKTREES_DIR).join(task_slug)
+fn resolve_worktree_path(project_path: &Path, task_slug: &str, worktree_dir: Option<&PathBuf>) -> PathBuf {
+    match worktree_dir {
+        Some(base) => base.join(task_slug),
+        None => project_path.join(AGTX_DIR).join(WORKTREES_DIR).join(task_slug),
+    }
 }
 
 pub struct RealJjOps;
 
 impl GitOperations for RealJjOps {
-    fn create_worktree(&self, project_path: &Path, task_slug: &str, _base_branch: &str) -> Result<String> {
-        let path = worktree_path(project_path, task_slug);
+    fn create_worktree_at(&self, project_path: &Path, task_slug: &str, _base_branch: &str, worktree_dir: Option<PathBuf>) -> Result<String> {
+        let path = resolve_worktree_path(project_path, task_slug, worktree_dir.as_ref());
 
         // If workspace already exists, return it
         if path.exists() {
@@ -72,8 +75,8 @@ impl GitOperations for RealJjOps {
         Ok(())
     }
 
-    fn worktree_exists(&self, project_path: &Path, task_slug: &str) -> bool {
-        worktree_path(project_path, task_slug).exists()
+    fn worktree_exists(&self, project_path: &Path, task_slug: &str, worktree_dir: Option<PathBuf>) -> bool {
+        resolve_worktree_path(project_path, task_slug, worktree_dir.as_ref()).exists()
     }
 
     fn delete_branch(&self, project_path: &Path, branch_name: &str) -> Result<()> {

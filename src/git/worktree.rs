@@ -7,9 +7,9 @@ const AGTX_DIR: &str = ".agtx";
 const WORKTREES_DIR: &str = "worktrees";
 
 /// Create a new git worktree for a task from the detected default branch.
-pub fn create_worktree(project_path: &Path, task_slug: &str) -> Result<PathBuf> {
+pub fn create_worktree(project_path: &Path, task_slug: &str, worktree_dir: Option<&Path>) -> Result<PathBuf> {
     let base_branch = detect_main_branch(project_path)?;
-    create_worktree_from_base(project_path, task_slug, &base_branch)
+    create_worktree_from_base(project_path, task_slug, &base_branch, worktree_dir)
 }
 
 /// Create a new git worktree for a task from the specified base branch.
@@ -17,11 +17,12 @@ pub fn create_worktree_from_base(
     project_path: &Path,
     task_slug: &str,
     base_branch: &str,
+    worktree_dir: Option<&Path>,
 ) -> Result<PathBuf> {
-    let worktree_path = project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
-        .join(task_slug);
+    let worktree_path = match worktree_dir {
+        Some(base) => base.join(task_slug),
+        None => project_path.join(AGTX_DIR).join(WORKTREES_DIR).join(task_slug),
+    };
 
     // If worktree already exists and is valid, return it
     if worktree_path.exists() && worktree_path.join(".git").exists() {
@@ -253,11 +254,11 @@ pub fn detect_main_branch(project_path: &Path) -> Result<String> {
 }
 
 /// Remove a git worktree
-pub fn remove_worktree(project_path: &Path, task_id: &str) -> Result<()> {
-    let worktree_path = project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
-        .join(task_id);
+pub fn remove_worktree(project_path: &Path, task_id: &str, worktree_dir: Option<&Path>) -> Result<()> {
+    let worktree_path = match worktree_dir {
+        Some(base) => base.join(task_id),
+        None => project_path.join(AGTX_DIR).join(WORKTREES_DIR).join(task_id),
+    };
 
     // Remove the worktree
     let output = Command::new("git")
@@ -280,14 +281,14 @@ pub fn remove_worktree(project_path: &Path, task_id: &str) -> Result<()> {
 }
 
 /// Get the worktree path for a task
-pub fn worktree_path(project_path: &Path, task_id: &str) -> PathBuf {
-    project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
-        .join(task_id)
+pub fn worktree_path(project_path: &Path, task_id: &str, worktree_dir: Option<&Path>) -> PathBuf {
+    match worktree_dir {
+        Some(base) => base.join(task_id),
+        None => project_path.join(AGTX_DIR).join(WORKTREES_DIR).join(task_id),
+    }
 }
 
 /// Check if a worktree exists for a task
-pub fn worktree_exists(project_path: &Path, task_id: &str) -> bool {
-    worktree_path(project_path, task_id).exists()
+pub fn worktree_exists(project_path: &Path, task_id: &str, worktree_dir: Option<&Path>) -> bool {
+    worktree_path(project_path, task_id, worktree_dir).exists()
 }

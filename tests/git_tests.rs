@@ -10,7 +10,7 @@ use tempfile::TempDir;
 #[test]
 fn test_worktree_path() {
     let project = PathBuf::from("/home/user/project");
-    let path = git::worktree_path(&project, "task-123");
+    let path = git::worktree_path(&project, "task-123", None);
     assert_eq!(
         path,
         PathBuf::from("/home/user/project/.agtx/worktrees/task-123")
@@ -20,7 +20,7 @@ fn test_worktree_path() {
 #[test]
 fn test_worktree_path_with_special_chars() {
     let project = PathBuf::from("/home/user/my-project");
-    let path = git::worktree_path(&project, "fix-bug-456");
+    let path = git::worktree_path(&project, "fix-bug-456", None);
     assert_eq!(
         path,
         PathBuf::from("/home/user/my-project/.agtx/worktrees/fix-bug-456")
@@ -30,7 +30,7 @@ fn test_worktree_path_with_special_chars() {
 #[test]
 fn test_worktree_path_nested_project() {
     let project = PathBuf::from("/home/user/projects/rust/agtx");
-    let path = git::worktree_path(&project, "feature-abc");
+    let path = git::worktree_path(&project, "feature-abc", None);
     assert_eq!(
         path,
         PathBuf::from("/home/user/projects/rust/agtx/.agtx/worktrees/feature-abc")
@@ -40,7 +40,26 @@ fn test_worktree_path_nested_project() {
 #[test]
 fn test_worktree_exists_false_for_nonexistent() {
     let temp_dir = TempDir::new().unwrap();
-    assert!(!git::worktree_exists(temp_dir.path(), "nonexistent-task"));
+    assert!(!git::worktree_exists(temp_dir.path(), "nonexistent-task", None));
+}
+
+#[test]
+fn test_worktree_path_with_custom_dir() {
+    let project = PathBuf::from("/home/user/project");
+    let custom_dir = PathBuf::from("/home/user/all-worktrees");
+    let path = git::worktree_path(&project, "task-123", Some(&custom_dir));
+    assert_eq!(path, PathBuf::from("/home/user/all-worktrees/task-123"));
+}
+
+#[test]
+fn test_worktree_path_custom_dir_ignores_project() {
+    let project_a = PathBuf::from("/home/user/project-a");
+    let project_b = PathBuf::from("/home/user/project-b");
+    let custom_dir = PathBuf::from("/worktrees");
+    let path_a = git::worktree_path(&project_a, "abc12345-my-task", Some(&custom_dir));
+    let path_b = git::worktree_path(&project_b, "abc12345-my-task", Some(&custom_dir));
+    assert_eq!(path_a, path_b);
+    assert_eq!(path_a, PathBuf::from("/worktrees/abc12345-my-task"));
 }
 
 // =============================================================================
@@ -129,15 +148,15 @@ fn test_create_and_remove_worktree() {
     let temp_dir = setup_git_repo();
 
     // Create worktree
-    let worktree_path = git::create_worktree(temp_dir.path(), "test-task").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "test-task", None).unwrap();
 
     // Verify it exists
     assert!(worktree_path.exists());
     assert!(worktree_path.join(".git").exists());
-    assert!(git::worktree_exists(temp_dir.path(), "test-task"));
+    assert!(git::worktree_exists(temp_dir.path(), "test-task", None));
 
     // Remove worktree
-    git::remove_worktree(temp_dir.path(), "test-task").unwrap();
+    git::remove_worktree(temp_dir.path(), "test-task", None).unwrap();
 
     // Verify it's gone
     assert!(!worktree_path.exists());
@@ -148,8 +167,8 @@ fn test_create_worktree_idempotent() {
     let temp_dir = setup_git_repo();
 
     // Create worktree twice - should succeed both times
-    let path1 = git::create_worktree(temp_dir.path(), "idempotent-task").unwrap();
-    let path2 = git::create_worktree(temp_dir.path(), "idempotent-task").unwrap();
+    let path1 = git::create_worktree(temp_dir.path(), "idempotent-task", None).unwrap();
+    let path2 = git::create_worktree(temp_dir.path(), "idempotent-task", None).unwrap();
 
     assert_eq!(path1, path2);
     assert!(path1.exists());
@@ -210,7 +229,7 @@ fn test_create_worktree_with_master_branch() {
     let temp_dir = setup_git_repo_with_master();
 
     // Should detect master and create worktree from it
-    let worktree_path = git::create_worktree(temp_dir.path(), "master-task").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "master-task", None).unwrap();
 
     assert!(worktree_path.exists());
     assert!(worktree_path.join(".git").exists());
@@ -221,7 +240,7 @@ fn test_create_worktree_on_non_git_directory() {
     let temp_dir = TempDir::new().unwrap();
     // Don't initialize git - just a plain directory
 
-    let result = git::create_worktree(temp_dir.path(), "should-fail");
+    let result = git::create_worktree(temp_dir.path(), "should-fail", None);
 
     assert!(result.is_err());
 }
@@ -232,7 +251,7 @@ fn test_remove_worktree_nonexistent() {
 
     // Removing a non-existent worktree should not panic
     // (it may return Ok or Err depending on git version, but shouldn't crash)
-    let result = git::remove_worktree(temp_dir.path(), "does-not-exist");
+    let result = git::remove_worktree(temp_dir.path(), "does-not-exist", None);
 
     // The function should complete without panicking
     // We don't assert success/failure since behavior may vary
@@ -263,9 +282,9 @@ fn test_create_multiple_worktrees() {
     let temp_dir = setup_git_repo();
 
     // Create multiple worktrees
-    let path1 = git::create_worktree(temp_dir.path(), "task-1").unwrap();
-    let path2 = git::create_worktree(temp_dir.path(), "task-2").unwrap();
-    let path3 = git::create_worktree(temp_dir.path(), "task-3").unwrap();
+    let path1 = git::create_worktree(temp_dir.path(), "task-1", None).unwrap();
+    let path2 = git::create_worktree(temp_dir.path(), "task-2", None).unwrap();
+    let path3 = git::create_worktree(temp_dir.path(), "task-3", None).unwrap();
 
     assert!(path1.exists());
     assert!(path2.exists());
@@ -277,9 +296,9 @@ fn test_create_multiple_worktrees() {
     assert_ne!(path1, path3);
 
     // Clean up
-    git::remove_worktree(temp_dir.path(), "task-1").unwrap();
-    git::remove_worktree(temp_dir.path(), "task-2").unwrap();
-    git::remove_worktree(temp_dir.path(), "task-3").unwrap();
+    git::remove_worktree(temp_dir.path(), "task-1", None).unwrap();
+    git::remove_worktree(temp_dir.path(), "task-2", None).unwrap();
+    git::remove_worktree(temp_dir.path(), "task-3", None).unwrap();
 
     assert!(!path1.exists());
     assert!(!path2.exists());
@@ -291,13 +310,13 @@ fn test_worktree_with_uncommitted_changes() {
     let temp_dir = setup_git_repo();
 
     // Create worktree
-    let worktree_path = git::create_worktree(temp_dir.path(), "dirty-task").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "dirty-task", None).unwrap();
 
     // Make uncommitted changes in the worktree
     std::fs::write(worktree_path.join("dirty-file.txt"), "uncommitted content").unwrap();
 
     // Remove should still work (with --force)
-    let result = git::remove_worktree(temp_dir.path(), "dirty-task");
+    let result = git::remove_worktree(temp_dir.path(), "dirty-task", None);
     assert!(result.is_ok());
 }
 
@@ -308,7 +327,7 @@ fn test_worktree_with_uncommitted_changes() {
 #[test]
 fn test_initialize_worktree_no_config() {
     let temp_dir = setup_git_repo();
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-none").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-none", None).unwrap();
 
     let warnings = git::initialize_worktree(temp_dir.path(), &worktree_path, None, None, &[]);
     assert!(warnings.is_empty());
@@ -320,7 +339,7 @@ fn test_initialize_worktree_copy_files() {
     std::fs::write(temp_dir.path().join(".env"), "DB_URL=localhost").unwrap();
     std::fs::write(temp_dir.path().join(".env.local"), "SECRET=abc").unwrap();
 
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-copy").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-copy", None).unwrap();
 
     let warnings = git::initialize_worktree(
         temp_dir.path(),
@@ -343,7 +362,7 @@ fn test_initialize_worktree_copy_files() {
 #[test]
 fn test_initialize_worktree_copy_missing_file() {
     let temp_dir = setup_git_repo();
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-missing").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-missing", None).unwrap();
 
     let warnings = git::initialize_worktree(
         temp_dir.path(),
@@ -359,7 +378,7 @@ fn test_initialize_worktree_copy_missing_file() {
 #[test]
 fn test_initialize_worktree_init_script_success() {
     let temp_dir = setup_git_repo();
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-script-ok").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-script-ok", None).unwrap();
 
     let warnings = git::initialize_worktree(
         temp_dir.path(),
@@ -375,7 +394,7 @@ fn test_initialize_worktree_init_script_success() {
 #[test]
 fn test_initialize_worktree_init_script_failure() {
     let temp_dir = setup_git_repo();
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-script-fail").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-script-fail", None).unwrap();
 
     let warnings =
         git::initialize_worktree(temp_dir.path(), &worktree_path, None, Some("exit 1"), &[]);
@@ -388,7 +407,7 @@ fn test_initialize_worktree_copy_then_script() {
     let temp_dir = setup_git_repo();
     std::fs::write(temp_dir.path().join(".env"), "KEY=value").unwrap();
 
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-order").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-order", None).unwrap();
 
     let warnings = git::initialize_worktree(
         temp_dir.path(),
@@ -411,7 +430,7 @@ fn test_initialize_worktree_copy_nested_path() {
     std::fs::create_dir_all(&web_dir).unwrap();
     std::fs::write(web_dir.join(".env.local"), "NEXT_PUBLIC_KEY=123").unwrap();
 
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-nested").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-nested", None).unwrap();
 
     let warnings = git::initialize_worktree(
         temp_dir.path(),
@@ -430,7 +449,7 @@ fn test_initialize_worktree_copy_nested_path() {
 #[test]
 fn test_initialize_worktree_empty_copy_files() {
     let temp_dir = setup_git_repo();
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-empty").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-empty", None).unwrap();
 
     let warnings =
         git::initialize_worktree(temp_dir.path(), &worktree_path, Some(", , "), None, &[]);
@@ -444,7 +463,7 @@ fn test_initialize_worktree_copy_directory_supported() {
     std::fs::create_dir_all(&config_dir).unwrap();
     std::fs::write(config_dir.join("app.toml"), "key = 1").unwrap();
 
-    let worktree_path = git::create_worktree(temp_dir.path(), "init-dir").unwrap();
+    let worktree_path = git::create_worktree(temp_dir.path(), "init-dir", None).unwrap();
 
     let warnings =
         git::initialize_worktree(temp_dir.path(), &worktree_path, Some("config"), None, &[]);

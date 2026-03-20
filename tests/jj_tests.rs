@@ -180,14 +180,14 @@ fn test_jj_create_and_remove_workspace() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "test-task", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "test-task", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     assert!(ws_path.exists());
-    assert!(ops.worktree_exists(temp_dir.path(), "test-task"));
+    assert!(ops.worktree_exists(temp_dir.path(), "test-task", None));
 
     ops.remove_worktree(temp_dir.path(), &ws).unwrap();
-    assert!(!ops.worktree_exists(temp_dir.path(), "test-task"));
+    assert!(!ops.worktree_exists(temp_dir.path(), "test-task", None));
 }
 
 #[test]
@@ -196,8 +196,8 @@ fn test_jj_create_workspace_idempotent() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws1 = ops.create_worktree(temp_dir.path(), "idem-task", "main").unwrap();
-    let ws2 = ops.create_worktree(temp_dir.path(), "idem-task", "main").unwrap();
+    let ws1 = ops.create_worktree_at(temp_dir.path(), "idem-task", "main", None).unwrap();
+    let ws2 = ops.create_worktree_at(temp_dir.path(), "idem-task", "main", None).unwrap();
     assert_eq!(ws1, ws2);
     assert!(Path::new(&ws1).exists());
 }
@@ -207,7 +207,7 @@ fn test_jj_worktree_exists_false_for_nonexistent() {
     if !jj_available() { return; }
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
-    assert!(!ops.worktree_exists(temp_dir.path(), "no-such-task"));
+    assert!(!ops.worktree_exists(temp_dir.path(), "no-such-task", None));
 }
 
 #[test]
@@ -216,9 +216,9 @@ fn test_jj_create_multiple_workspaces() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws1 = ops.create_worktree(temp_dir.path(), "task-1", "main").unwrap();
-    let ws2 = ops.create_worktree(temp_dir.path(), "task-2", "main").unwrap();
-    let ws3 = ops.create_worktree(temp_dir.path(), "task-3", "main").unwrap();
+    let ws1 = ops.create_worktree_at(temp_dir.path(), "task-1", "main", None).unwrap();
+    let ws2 = ops.create_worktree_at(temp_dir.path(), "task-2", "main", None).unwrap();
+    let ws3 = ops.create_worktree_at(temp_dir.path(), "task-3", "main", None).unwrap();
 
     assert_ne!(ws1, ws2);
     assert_ne!(ws2, ws3);
@@ -245,7 +245,7 @@ fn test_jj_has_changes_false_on_clean_workspace() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "clean-task", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "clean-task", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     assert!(!ops.has_changes(ws_path));
@@ -257,7 +257,7 @@ fn test_jj_has_changes_true_after_file_write() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "dirty-task", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "dirty-task", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     std::fs::write(ws_path.join("new_file.txt"), "hello").unwrap();
@@ -271,7 +271,7 @@ fn test_jj_diff_always_empty() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "diff-clean", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "diff-clean", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     // jj has no staging area — nothing is ever "unstaged"
@@ -288,7 +288,7 @@ fn test_jj_diff_cached_shows_changes() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "diff-cached", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "diff-cached", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     // clean workspace — no staged changes yet
@@ -307,7 +307,7 @@ fn test_jj_list_untracked_files_empty() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "untracked", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "untracked", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     // jj tracks all files — untracked list is always empty
@@ -324,7 +324,7 @@ fn test_jj_add_all_triggers_snapshot() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "snapshot", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "snapshot", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     std::fs::write(ws_path.join("snap.txt"), "data").unwrap();
@@ -340,7 +340,7 @@ fn test_jj_commit_creates_immutable_change() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "commit-task", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "commit-task", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     std::fs::write(ws_path.join("work.txt"), "some work").unwrap();
@@ -359,7 +359,7 @@ fn test_jj_commit_noop_on_clean_workspace() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "commit-clean", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "commit-clean", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     // Committing with no changes should not error
@@ -389,7 +389,7 @@ fn test_jj_list_files_from_workspace() {
     let temp_dir = setup_jj_repo();
     let ops = RealJjOps;
 
-    let ws = ops.create_worktree(temp_dir.path(), "list-files", "main").unwrap();
+    let ws = ops.create_worktree_at(temp_dir.path(), "list-files", "main", None).unwrap();
     let ws_path = Path::new(&ws);
 
     // Add a file so the workspace has something to list

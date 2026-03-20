@@ -1,7 +1,7 @@
 //! Traits for git operations to enable testing with mocks.
 
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "test-mocks")]
 use mockall::automock;
@@ -9,19 +9,30 @@ use mockall::automock;
 /// Operations for git worktree management
 #[cfg_attr(feature = "test-mocks", automock)]
 pub trait GitOperations: Send + Sync {
-    /// Create a worktree for a task
+    /// Create a worktree for a task from a specified base branch, optionally in a custom directory
+    fn create_worktree_at(
+        &self,
+        project_path: &Path,
+        task_slug: &str,
+        base_branch: &str,
+        worktree_dir: Option<PathBuf>,
+    ) -> Result<String>;
+
+    /// Create a worktree in the default location (no custom worktree_dir)
     fn create_worktree(
         &self,
         project_path: &Path,
         task_slug: &str,
         base_branch: &str,
-    ) -> Result<String>;
+    ) -> Result<String> {
+        self.create_worktree_at(project_path, task_slug, base_branch, None)
+    }
 
     /// Remove a worktree
     fn remove_worktree(&self, project_path: &Path, worktree_path: &str) -> Result<()>;
 
     /// Check if worktree exists
-    fn worktree_exists(&self, project_path: &Path, task_slug: &str) -> bool;
+    fn worktree_exists(&self, project_path: &Path, task_slug: &str, worktree_dir: Option<PathBuf>) -> bool;
 
     /// Delete a branch
     fn delete_branch(&self, project_path: &Path, branch_name: &str) -> Result<()>;
@@ -77,13 +88,14 @@ pub trait GitOperations: Send + Sync {
 pub struct RealGitOps;
 
 impl GitOperations for RealGitOps {
-    fn create_worktree(
+    fn create_worktree_at(
         &self,
         project_path: &Path,
         task_slug: &str,
         base_branch: &str,
+        worktree_dir: Option<PathBuf>,
     ) -> Result<String> {
-        let path = super::create_worktree_from_base(project_path, task_slug, base_branch)?;
+        let path = super::create_worktree_from_base(project_path, task_slug, base_branch, worktree_dir.as_deref())?;
         Ok(path.to_string_lossy().to_string())
     }
 
@@ -95,8 +107,8 @@ impl GitOperations for RealGitOps {
         Ok(())
     }
 
-    fn worktree_exists(&self, project_path: &Path, task_slug: &str) -> bool {
-        super::worktree_exists(project_path, task_slug)
+    fn worktree_exists(&self, project_path: &Path, task_slug: &str, worktree_dir: Option<PathBuf>) -> bool {
+        super::worktree_exists(project_path, task_slug, worktree_dir.as_deref())
     }
 
     fn delete_branch(&self, project_path: &Path, branch_name: &str) -> Result<()> {
