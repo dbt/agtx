@@ -51,8 +51,9 @@ fn build_footer_text(
                     0 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [R] research  [m] plan  [M] run  [e] sidebar  [q] quit".to_string(),
                     1 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] run  [e] sidebar  [q] quit".to_string(),
                     2 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] move  [r] move left  [e] sidebar  [q] quit".to_string(),
-                    3 if has_cyclic_plugin => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] done  [r] resume  [p] next phase  [e] sidebar  [q] quit".to_string(),
-                    3 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] move  [r] move left  [e] sidebar  [q] quit".to_string(),
+                    3 if has_cyclic_plugin => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] pr  [r] resume  [p] next phase  [e] sidebar  [q] quit".to_string(),
+                    3 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] pr  [r] resume  [e] sidebar  [q] quit".to_string(),
+                    4 => " [o] new  [/] search  [Enter] open  [x] del  [d] diff  [m] done  [r] redo PR  [e] sidebar  [q] quit".to_string(),
                     _ => " [o] new  [/] search  [Enter] open  [x] del  [e] sidebar  [q] quit".to_string(),
                 }
             }
@@ -243,18 +244,8 @@ struct AppState {
     highlighted_references: HashSet<String>,
     // Task search popup
     task_search: Option<TaskSearchState>,
-    // PR creation confirmation popup
-    pr_confirm_popup: Option<PrConfirmPopup>,
-    // Moving Review back to Running
-    review_to_running_task_id: Option<String>,
     // Git diff popup
     diff_popup: Option<DiffPopup>,
-    // Channel for receiving PR description generation results
-    pr_generation_rx: Option<mpsc::Receiver<(String, String)>>,
-    // PR creation status popup
-    pr_status_popup: Option<PrStatusPopup>,
-    // Channel for receiving PR creation results
-    pr_creation_rx: Option<mpsc::Receiver<Result<(i32, String), String>>>,
     // Confirmation popup for moving to Done with open PR
     done_confirm_popup: Option<DoneConfirmPopup>,
     // Confirmation popup for moving task when phase is incomplete
@@ -263,8 +254,6 @@ struct AppState {
     skip_move_confirm: bool,
     // Confirmation popup for deleting a task
     delete_confirm_popup: Option<DeleteConfirmPopup>,
-    // Confirmation popup for asking if user wants to create PR when moving to Review
-    review_confirm_popup: Option<ReviewConfirmPopup>,
     // Channel for receiving background worktree setup results
     setup_rx: Option<mpsc::Receiver<SetupResult>>,
     // Phase detection
@@ -364,22 +353,6 @@ struct SessionRefreshResult {
     statuses: Vec<SessionTaskStatus>,
 }
 
-/// State for PR creation status popup (loading/success/error)
-#[derive(Debug, Clone)]
-struct PrStatusPopup {
-    status: PrCreationStatus,
-    pr_url: Option<String>,
-    error_message: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum PrCreationStatus {
-    Creating,
-    Pushing, // Pushing to existing PR
-    Success,
-    Error,
-}
-
 /// State for git diff popup
 #[derive(Debug, Clone)]
 struct DiffPopup {
@@ -394,16 +367,6 @@ struct TaskSearchState {
     query: String,
     matches: Vec<(String, String, TaskStatus)>, // (id, title, status)
     selected: usize,
-}
-
-/// State for PR creation confirmation popup
-#[derive(Debug, Clone)]
-struct PrConfirmPopup {
-    task_id: String,
-    pr_title: String,
-    pr_body: String,
-    editing_title: bool, // true = editing title, false = editing body
-    generating: bool,    // true while agent is generating description
 }
 
 /// Info about a project for the sidebar
@@ -452,13 +415,6 @@ struct TaskRefSearchState {
 /// State for delete confirmation popup
 #[derive(Debug, Clone)]
 struct DeleteConfirmPopup {
-    task_id: String,
-    task_title: String,
-}
-
-/// State for asking if user wants to create PR when moving to Review
-#[derive(Debug, Clone)]
-struct ReviewConfirmPopup {
     task_id: String,
     task_title: String,
 }
@@ -596,18 +552,12 @@ impl App {
                 task_ref_search: None,
                 highlighted_references: HashSet::new(),
                 task_search: None,
-                pr_confirm_popup: None,
-                review_to_running_task_id: None,
                 diff_popup: None,
-                pr_generation_rx: None,
-                pr_status_popup: None,
-                pr_creation_rx: None,
                 setup_rx: None,
                 done_confirm_popup: None,
                 move_confirm_popup: None,
                 skip_move_confirm: false,
                 delete_confirm_popup: None,
-                review_confirm_popup: None,
                 phase_status_cache: HashMap::new(),
                 spinner_frame: 0,
                 pane_content_hashes: HashMap::new(),
@@ -771,18 +721,12 @@ impl App {
                 task_ref_search: None,
                 highlighted_references: HashSet::new(),
                 task_search: None,
-                pr_confirm_popup: None,
-                review_to_running_task_id: None,
                 diff_popup: None,
-                pr_generation_rx: None,
-                pr_status_popup: None,
-                pr_creation_rx: None,
                 setup_rx: None,
                 done_confirm_popup: None,
                 move_confirm_popup: None,
                 skip_move_confirm: false,
                 delete_confirm_popup: None,
-                review_confirm_popup: None,
                 phase_status_cache: HashMap::new(),
                 spinner_frame: 0,
                 pane_content_hashes: HashMap::new(),
@@ -805,42 +749,6 @@ impl App {
     pub async fn run(&mut self) -> Result<()> {
         while !self.state.should_quit {
             self.draw()?;
-
-            // Check for PR generation completion
-            if let Some(ref rx) = self.state.pr_generation_rx {
-                if let Ok((pr_title, pr_body)) = rx.try_recv() {
-                    if let Some(ref mut popup) = self.state.pr_confirm_popup {
-                        popup.pr_title = pr_title;
-                        popup.pr_body = pr_body;
-                        popup.generating = false;
-                    }
-                    self.state.pr_generation_rx = None;
-                }
-            }
-
-            // Check for PR creation completion
-            if let Some(ref rx) = self.state.pr_creation_rx {
-                if let Ok(result) = rx.try_recv() {
-                    match result {
-                        Ok((_, pr_url)) => {
-                            self.state.pr_status_popup = Some(PrStatusPopup {
-                                status: PrCreationStatus::Success,
-                                pr_url: Some(pr_url),
-                                error_message: None,
-                            });
-                        }
-                        Err(err) => {
-                            self.state.pr_status_popup = Some(PrStatusPopup {
-                                status: PrCreationStatus::Error,
-                                pr_url: None,
-                                error_message: Some(err),
-                            });
-                        }
-                    }
-                    self.state.pr_creation_rx = None;
-                    self.refresh_tasks()?;
-                }
-            }
 
             // Check for worktree setup completion
             if let Some(ref rx) = self.state.setup_rx {
@@ -975,10 +883,7 @@ impl App {
 
         // Header
         let plugin_label = state.config.workflow_plugin.as_deref().unwrap_or("agtx");
-        let left = Span::styled(
-            format!(" {} ", state.project_name),
-            Style::default().fg(Color::Cyan).bold(),
-        );
+        let left = Span::styled(format!(" {} ", state.project_name), Style::default().fg(Color::Cyan).bold());
         let mut right_spans: Vec<Span> = Vec::new();
         if state.flags.experimental {
             let orch_active = state.orchestrator_session.is_some();
@@ -1013,16 +918,13 @@ impl App {
             Paragraph::new(Line::from(spans)).block(Block::default().borders(Borders::ALL));
         frame.render_widget(header, chunks[0]);
 
-        // Board columns (5 columns: Backlog, Planning, Running, Review, Done)
+        // Board columns (6 columns: Backlog, Planning, Running, Review, PR, Done)
+        let col_pct = 100 / TaskStatus::columns().len() as u16;
         let columns = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-            ])
+            .constraints(
+                TaskStatus::columns().iter().map(|_| Constraint::Percentage(col_pct)).collect::<Vec<_>>()
+            )
             .split(chunks[1]);
 
         for (i, status) in TaskStatus::columns().iter().enumerate() {
@@ -1569,6 +1471,7 @@ impl App {
                         TaskStatus::Planning => "📝",
                         TaskStatus::Running => "⚡",
                         TaskStatus::Review => "👀",
+                        TaskStatus::PR => "🔀",
                         TaskStatus::Done => "✅",
                     };
 
@@ -1587,204 +1490,6 @@ impl App {
             frame.render_widget(list, popup_chunks[1]);
         }
 
-        // PR confirmation popup
-        if let Some(ref popup) = state.pr_confirm_popup {
-            let popup_area = centered_rect(60, 60, area);
-            frame.render_widget(Clear, popup_area);
-
-            // Show loading state while generating
-            if popup.generating {
-                let main_block = Block::default()
-                    .title(" Create Pull Request ")
-                    .borders(Borders::ALL)
-                    .border_style(
-                        Style::default().fg(hex_to_color(&state.config.theme.color_selected)),
-                    );
-                frame.render_widget(main_block, popup_area);
-
-                // Spinner animation based on frame count
-                let spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-                let spinner_idx = (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis()
-                    / 100) as usize
-                    % spinner_chars.len();
-                let spinner = spinner_chars[spinner_idx];
-
-                let agent_name = state.config.default_agent.clone();
-                let loading_text = format!(
-                    "{} Generating PR description with {}...",
-                    spinner, agent_name
-                );
-                let loading = Paragraph::new(loading_text)
-                    .style(Style::default().fg(Color::Cyan))
-                    .alignment(ratatui::layout::Alignment::Center);
-
-                // Center vertically within the popup
-                let inner = popup_area.inner(ratatui::layout::Margin {
-                    horizontal: 2,
-                    vertical: popup_area.height.saturating_sub(3) / 2,
-                });
-                frame.render_widget(loading, inner);
-            } else {
-                let popup_chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(3), // Title input
-                        Constraint::Min(0),    // Body input
-                        Constraint::Length(1), // Help line
-                    ])
-                    .margin(1)
-                    .split(popup_area);
-
-                // Main border
-                let main_block = Block::default()
-                    .title(" Create Pull Request ")
-                    .borders(Borders::ALL)
-                    .border_style(
-                        Style::default().fg(hex_to_color(&state.config.theme.color_popup_border)),
-                    );
-                frame.render_widget(main_block, popup_area);
-
-                // Title input
-                let title_style = if popup.editing_title {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_selected))
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                let title_border = if popup.editing_title {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_selected))
-                } else {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_dimmed))
-                };
-                let title_cursor = if popup.editing_title { "█" } else { "" };
-                let title_input = Paragraph::new(format!("{}{}", popup.pr_title, title_cursor))
-                    .style(title_style)
-                    .block(
-                        Block::default()
-                            .title(" Title ")
-                            .borders(Borders::ALL)
-                            .border_style(title_border),
-                    );
-                frame.render_widget(title_input, popup_chunks[0]);
-
-                // Body input
-                let body_style = if !popup.editing_title {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_selected))
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                let body_border = if !popup.editing_title {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_selected))
-                } else {
-                    Style::default().fg(hex_to_color(&state.config.theme.color_dimmed))
-                };
-                let body_cursor = if !popup.editing_title { "█" } else { "" };
-                let body_input = Paragraph::new(format!("{}{}", popup.pr_body, body_cursor))
-                    .style(body_style)
-                    .wrap(Wrap { trim: false })
-                    .block(
-                        Block::default()
-                            .title(" Description ")
-                            .borders(Borders::ALL)
-                            .border_style(body_border),
-                    );
-                frame.render_widget(body_input, popup_chunks[1]);
-
-                // Help line
-                let help = Paragraph::new(" [Tab] switch field  [Ctrl+s] create PR  [Esc] cancel ")
-                    .style(Style::default().fg(hex_to_color(&state.config.theme.color_dimmed)));
-                frame.render_widget(help, popup_chunks[2]);
-            }
-        }
-
-        // PR creation status popup (loading/success/error)
-        if let Some(ref popup) = state.pr_status_popup {
-            let popup_area = centered_rect(50, 20, area);
-            frame.render_widget(Clear, popup_area);
-
-            let (title, border_color) = match popup.status {
-                PrCreationStatus::Creating => (
-                    " Creating Pull Request ",
-                    hex_to_color(&state.config.theme.color_selected),
-                ),
-                PrCreationStatus::Pushing => (
-                    " Pushing Changes ",
-                    hex_to_color(&state.config.theme.color_selected),
-                ),
-                PrCreationStatus::Success => (" Pull Request Created ", Color::Green),
-                PrCreationStatus::Error => (" Error Creating PR ", Color::Red),
-            };
-
-            let main_block = Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color));
-            frame.render_widget(main_block, popup_area);
-
-            let inner = popup_area.inner(ratatui::layout::Margin {
-                horizontal: 2,
-                vertical: 2,
-            });
-
-            match popup.status {
-                PrCreationStatus::Creating => {
-                    let spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-                    let spinner_idx = (std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis()
-                        / 100) as usize
-                        % spinner_chars.len();
-                    let spinner = spinner_chars[spinner_idx];
-
-                    let text = format!("{} Pushing branch and creating PR...", spinner);
-                    let content = Paragraph::new(text)
-                        .style(Style::default().fg(Color::Cyan))
-                        .alignment(ratatui::layout::Alignment::Center);
-                    frame.render_widget(content, inner);
-                }
-                PrCreationStatus::Pushing => {
-                    let spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-                    let spinner_idx = (std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis()
-                        / 100) as usize
-                        % spinner_chars.len();
-                    let spinner = spinner_chars[spinner_idx];
-
-                    let text = format!("{} PR exists. Pushing changes...", spinner);
-                    let content = Paragraph::new(text)
-                        .style(Style::default().fg(Color::Cyan))
-                        .alignment(ratatui::layout::Alignment::Center);
-                    frame.render_widget(content, inner);
-                }
-                PrCreationStatus::Success => {
-                    let url = popup.pr_url.as_deref().unwrap_or("unknown");
-                    // Check if this was a push to existing PR or new PR creation
-                    let message = if url.starts_with("http") {
-                        format!("Success!\n\n{}\n\n[Enter] to close", url)
-                    } else {
-                        format!("{}\n\n[Enter] to close", url)
-                    };
-                    let content = Paragraph::new(message)
-                        .style(Style::default().fg(Color::Green))
-                        .alignment(ratatui::layout::Alignment::Center);
-                    frame.render_widget(content, inner);
-                }
-                PrCreationStatus::Error => {
-                    let err = popup.error_message.as_deref().unwrap_or("Unknown error");
-                    let text = format!("Failed to create PR:\n\n{}\n\n[Enter] to close", err);
-                    let content = Paragraph::new(text)
-                        .style(Style::default().fg(Color::Red))
-                        .alignment(ratatui::layout::Alignment::Center)
-                        .wrap(Wrap { trim: false });
-                    frame.render_widget(content, inner);
-                }
-            }
-        }
 
         // Done confirmation popup
         if let Some(ref popup) = state.done_confirm_popup {
@@ -1840,6 +1545,7 @@ impl App {
                 TaskStatus::Planning => "Planning",
                 TaskStatus::Running => "Running",
                 TaskStatus::Review => "Review",
+                TaskStatus::PR => "PR",
                 _ => "Current",
             };
             let main_block = Block::default()
@@ -1891,33 +1597,6 @@ impl App {
             frame.render_widget(content, inner);
         }
 
-        // Review confirmation popup (ask if user wants to create PR)
-        if let Some(ref popup) = state.review_confirm_popup {
-            let popup_area = centered_rect(50, 25, area);
-            frame.render_widget(Clear, popup_area);
-
-            let main_block = Block::default()
-                .title(" Move to Review ")
-                .borders(Borders::ALL)
-                .border_style(
-                    Style::default().fg(hex_to_color(&state.config.theme.color_popup_border)),
-                );
-            frame.render_widget(main_block, popup_area);
-
-            let inner = popup_area.inner(ratatui::layout::Margin {
-                horizontal: 2,
-                vertical: 2,
-            });
-            let text = format!(
-                "Moving task to Review:\n\n\"{}\"\n\nDo you want to create a Pull Request?\n\n[y] Yes, create PR    [n] No, just move    [Esc] Cancel",
-                popup.task_title
-            );
-            let content = Paragraph::new(text)
-                .style(Style::default().fg(Color::White))
-                .alignment(ratatui::layout::Alignment::Center)
-                .wrap(Wrap { trim: false });
-            frame.render_widget(content, inner);
-        }
 
         // Plugin selection popup
         if let Some(ref popup) = state.plugin_select_popup {
@@ -2380,18 +2059,6 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
-        // Handle PR status popup if open (loading/success/error)
-        if let Some(ref popup) = self.state.pr_status_popup {
-            // Only allow closing if not in Creating/Pushing state
-            if popup.status != PrCreationStatus::Creating
-                && popup.status != PrCreationStatus::Pushing
-            {
-                if matches!(key.code, KeyCode::Enter | KeyCode::Esc) {
-                    self.state.pr_status_popup = None;
-                }
-            }
-            return Ok(());
-        }
 
         // Handle Move confirmation popup if open (phase incomplete)
         if self.state.move_confirm_popup.is_some() {
@@ -2408,19 +2075,9 @@ impl App {
             return self.handle_delete_confirm_key(key);
         }
 
-        // Handle Review confirmation popup if open
-        if self.state.review_confirm_popup.is_some() {
-            return self.handle_review_confirm_key(key);
-        }
-
         // Handle diff popup if open
         if self.state.diff_popup.is_some() {
             return self.handle_diff_popup_key(key);
-        }
-
-        // Handle PR confirmation popup if open
-        if self.state.pr_confirm_popup.is_some() {
-            return self.handle_pr_confirm_key(key);
         }
 
         // Handle plugin selection popup if open
@@ -2497,29 +2154,6 @@ impl App {
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                     // Cancelled
                     self.state.delete_confirm_popup = None;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_review_confirm_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
-        if let Some(popup) = self.state.review_confirm_popup.clone() {
-            match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') => {
-                    // Yes - create PR and move to review
-                    self.state.review_confirm_popup = None;
-                    self.move_running_to_review_with_pr(&popup.task_id)?;
-                }
-                KeyCode::Char('n') | KeyCode::Char('N') => {
-                    // No - just move to review without PR
-                    self.state.review_confirm_popup = None;
-                    self.move_running_to_review_without_pr(&popup.task_id)?;
-                }
-                KeyCode::Esc => {
-                    // Cancelled - don't move
-                    self.state.review_confirm_popup = None;
                 }
                 _ => {}
             }
@@ -2655,179 +2289,6 @@ impl App {
         Ok(())
     }
 
-    fn move_running_to_review_with_pr(&mut self, task_id: &str) -> Result<()> {
-        if let Some(db) = &self.state.db {
-            if let Some(task) = db.get_task(task_id)? {
-                let task_title = task.title.clone();
-                let worktree_path = task.worktree_path.clone();
-
-                // Show popup immediately with loading state
-                self.state.pr_confirm_popup = Some(PrConfirmPopup {
-                    task_id: task_id.to_string(),
-                    pr_title: task_title.clone(),
-                    pr_body: String::new(),
-                    editing_title: true,
-                    generating: true,
-                });
-
-                // Spawn background thread to generate PR description
-                let (tx, rx) = mpsc::channel();
-                self.state.pr_generation_rx = Some(rx);
-
-                let title_for_thread = task_title.clone();
-                let worktree_for_thread = worktree_path.clone();
-                let git_ops = Arc::clone(&self.state.git_ops);
-                let agent_ops = self
-                    .state
-                    .agent_registry
-                    .get(&self.state.config.default_agent);
-                std::thread::spawn(move || {
-                    let (pr_title, pr_body) = generate_pr_description(
-                        &title_for_thread,
-                        worktree_for_thread.as_deref(),
-                        None,
-                        git_ops.as_ref(),
-                        agent_ops.as_ref(),
-                    );
-                    let _ = tx.send((pr_title, pr_body));
-                });
-            }
-        }
-        Ok(())
-    }
-
-    fn move_running_to_review_without_pr(&mut self, task_id: &str) -> Result<()> {
-        if let Some(db) = &self.state.db {
-            if let Some(mut task) = db.get_task(task_id)? {
-                task.status = TaskStatus::Review;
-                task.updated_at = chrono::Utc::now();
-                db.update_task(&task)?;
-                self.refresh_tasks()?;
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_pr_confirm_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
-        use crossterm::event::KeyModifiers;
-
-        if let Some(ref mut popup) = self.state.pr_confirm_popup {
-            match key.code {
-                KeyCode::Esc => {
-                    self.state.pr_confirm_popup = None;
-                }
-                KeyCode::Tab => {
-                    // Switch between title and body editing
-                    popup.editing_title = !popup.editing_title;
-                }
-                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if !popup.generating {
-                        // Ctrl+s: Submit and create PR
-                        let task_id = popup.task_id.clone();
-                        let pr_title = popup.pr_title.clone();
-                        let pr_body = popup.pr_body.clone();
-                        self.state.pr_confirm_popup = None;
-                        self.create_pr_and_move_to_review_with_content(
-                            &task_id, &pr_title, &pr_body,
-                        )?;
-                    }
-                }
-                KeyCode::Enter => {
-                    if popup.editing_title && !popup.generating {
-                        // Enter in title: move to body editing
-                        popup.editing_title = false;
-                    } else if !popup.generating {
-                        // Enter in body: add newline
-                        popup.pr_body.push('\n');
-                    }
-                }
-                KeyCode::Backspace => {
-                    if popup.editing_title {
-                        popup.pr_title.pop();
-                    } else {
-                        popup.pr_body.pop();
-                    }
-                }
-                KeyCode::Char(c) => {
-                    if popup.editing_title {
-                        popup.pr_title.push(c);
-                    } else {
-                        popup.pr_body.push(c);
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn create_pr_and_move_to_review_with_content(
-        &mut self,
-        task_id: &str,
-        pr_title: &str,
-        pr_body: &str,
-    ) -> Result<()> {
-        if let (Some(db), Some(project_path)) = (&self.state.db, self.state.project_path.clone()) {
-            if let Some(mut task) = db.get_task(task_id)? {
-                // Keep tmux window open - session_name stays set for resume
-
-                // Show loading popup
-                self.state.pr_status_popup = Some(PrStatusPopup {
-                    status: PrCreationStatus::Creating,
-                    pr_url: None,
-                    error_message: None,
-                });
-
-                // Clone data for background thread
-                let task_clone = task.clone();
-                let project_path_clone = project_path.clone();
-                let pr_title_clone = pr_title.to_string();
-                let pr_body_clone = pr_body.to_string();
-                let git_ops = Arc::clone(&self.state.git_ops);
-                let git_provider_ops = Arc::clone(&self.state.git_provider_ops);
-                let agent_ops = self
-                    .state
-                    .agent_registry
-                    .get(&self.state.config.default_agent);
-
-                // Create channel for result
-                let (tx, rx) = mpsc::channel();
-                self.state.pr_creation_rx = Some(rx);
-
-                // Spawn background thread to create PR
-                std::thread::spawn(move || {
-                    let result = create_pr_with_content(
-                        &task_clone,
-                        &project_path_clone,
-                        &pr_title_clone,
-                        &pr_body_clone,
-                        git_ops.as_ref(),
-                        git_provider_ops.as_ref(),
-                        agent_ops.as_ref(),
-                    );
-                    match result {
-                        Ok((pr_number, pr_url)) => {
-                            // Update task in database from background thread
-                            // Keep session_name so popup can still be opened in Review
-                            if let Ok(db) = crate::db::Database::open_project(&project_path_clone) {
-                                let mut updated_task = task_clone;
-                                updated_task.pr_number = Some(pr_number);
-                                updated_task.pr_url = Some(pr_url.clone());
-                                updated_task.status = TaskStatus::Review;
-                                updated_task.updated_at = chrono::Utc::now();
-                                let _ = db.update_task(&updated_task);
-                            }
-                            let _ = tx.send(Ok((pr_number, pr_url)));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(e.to_string()));
-                        }
-                    }
-                });
-            }
-        }
-        Ok(())
-    }
 
     fn handle_task_search_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
         use crossterm::event::KeyModifiers;
@@ -3262,8 +2723,8 @@ impl App {
                 if let Some(task) = self.state.board.selected_task() {
                     let task_id = task.id.clone();
                     match task.status {
-                        // Move Review task back to Running (for PR changes)
-                        TaskStatus::Review => self.move_review_to_running(&task_id)?,
+                        // Move Review or PR task back to Running (to address feedback / redo PR)
+                        TaskStatus::Review | TaskStatus::PR => self.move_review_to_running(&task_id)?,
                         // Move Running task back to Planning
                         TaskStatus::Running => self.move_running_to_planning(&task_id)?,
                         _ => {}
@@ -4095,7 +3556,8 @@ impl App {
             TaskStatus::Backlog => Some(TaskStatus::Planning),
             TaskStatus::Planning => Some(TaskStatus::Running),
             TaskStatus::Running => Some(TaskStatus::Review),
-            TaskStatus::Review => Some(TaskStatus::Done),
+            TaskStatus::Review => Some(TaskStatus::PR),
+            TaskStatus::PR => Some(TaskStatus::Done),
             TaskStatus::Done => None,
         };
 
@@ -4112,9 +3574,12 @@ impl App {
                     self.transition_to_running(&mut task)?
                 }
                 (TaskStatus::Running, TaskStatus::Review) => {
-                    self.transition_to_review(&mut task, &project_path)?
+                    self.transition_to_review(&mut task)?
                 }
-                (TaskStatus::Review, TaskStatus::Done) => {
+                (TaskStatus::Review, TaskStatus::PR) => {
+                    self.transition_to_pr(&mut task)?
+                }
+                (TaskStatus::PR, TaskStatus::Done) => {
                     self.transition_to_done(&mut task, &project_path)?
                 }
                 _ => false,
@@ -4154,7 +3619,7 @@ impl App {
         }
         if !matches!(
             current_status,
-            TaskStatus::Planning | TaskStatus::Running | TaskStatus::Review
+            TaskStatus::Planning | TaskStatus::Running | TaskStatus::Review | TaskStatus::PR
         ) {
             return false;
         }
@@ -4423,9 +3888,9 @@ impl App {
         Ok(false)
     }
 
-    /// Running → Review: send review skill/prompt, then handle PR state.
-    /// Returns Ok(true) always (PR push or review confirm popup shown).
-    fn transition_to_review(&mut self, task: &mut Task, project_path: &Path) -> Result<bool> {
+    /// Running → Review: send review skill/prompt.
+    /// Always returns Ok(false) to continue with db update.
+    fn transition_to_review(&mut self, task: &mut Task) -> Result<bool> {
         let (review_agent, agent_switch) = needs_agent_switch(&self.state.config, task, "review");
         if let Some(session_name) = &task.session_name {
             let plugin = self.load_task_plugin(task);
@@ -4451,52 +3916,30 @@ impl App {
                 auto_dismiss,
             );
         }
-        task.agent = review_agent.clone();
+        task.agent = review_agent;
+        Ok(false)
+    }
 
-        // PR already exists (task was resumed from Review) — push new changes
-        if task.pr_number.is_some() {
-            self.state.pr_status_popup = Some(PrStatusPopup {
-                status: PrCreationStatus::Pushing,
-                pr_url: None,
-                error_message: None,
-            });
-
-            let task_clone = task.clone();
-            let project_path_clone = project_path.to_path_buf();
-            let git_ops = Arc::clone(&self.state.git_ops);
-            let agent_ops = self.state.agent_registry.get(&review_agent);
-
-            let (tx, rx) = mpsc::channel();
-            self.state.pr_creation_rx = Some(rx);
-
-            std::thread::spawn(move || {
-                let result =
-                    push_changes_to_existing_pr(&task_clone, git_ops.as_ref(), agent_ops.as_ref());
-                match result {
-                    Ok(pr_url) => {
-                        if let Ok(db) = crate::db::Database::open_project(&project_path_clone) {
-                            let mut updated_task = task_clone;
-                            updated_task.status = TaskStatus::Review;
-                            updated_task.updated_at = chrono::Utc::now();
-                            let _ = db.update_task(&updated_task);
-                        }
-                        let _ = tx.send(Ok((0, pr_url)));
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e.to_string()));
-                    }
-                }
-            });
-
-            return Ok(true);
+    /// Review → PR: send pr skill/prompt. Agent creates the GitHub PR autonomously.
+    /// Always returns Ok(false) to continue with db update.
+    fn transition_to_pr(&mut self, task: &mut Task) -> Result<bool> {
+        let (pr_agent, agent_switch) = needs_agent_switch(&self.state.config, task, "pr");
+        if let Some(session_name) = &task.session_name {
+            let plugin = self.load_task_plugin(task);
+            let task_content = task.content_text();
+            let skill_cmd = resolve_skill_command(&plugin, "pr", &pr_agent, &task_content, task.cycle);
+            let prompt = resolve_prompt(&plugin, "pr", &task_content, &task.id, task.cycle);
+            let prompt_trigger = resolve_prompt_trigger(&plugin, "pr");
+            let auto_dismiss = plugin.as_ref().map_or_else(Vec::new, |p| p.auto_dismiss.clone());
+            spawn_send_to_agent(
+                Arc::clone(&self.state.tmux_ops),
+                Arc::clone(&self.state.agent_registry),
+                session_name.clone(), task.agent.clone(), pr_agent.clone(), agent_switch,
+                skill_cmd, prompt, prompt_trigger, task_content, auto_dismiss,
+            );
         }
-
-        // No PR yet — show confirmation popup
-        self.state.review_confirm_popup = Some(ReviewConfirmPopup {
-            task_id: task.id.clone(),
-            task_title: task.title.clone(),
-        });
-        Ok(true)
+        task.agent = pr_agent;
+        Ok(false)
     }
 
     /// Review → Done: check PR state, uncommitted changes, or clean up.
@@ -4891,7 +4334,7 @@ impl App {
     fn move_review_to_running(&mut self, task_id: &str) -> Result<()> {
         if let (Some(db), Some(_project_path)) = (&self.state.db, &self.state.project_path) {
             if let Some(mut task) = db.get_task(task_id)? {
-                if task.status != TaskStatus::Review {
+                if !matches!(task.status, TaskStatus::Review | TaskStatus::PR) {
                     return Ok(());
                 }
 
@@ -5139,21 +4582,27 @@ impl App {
                         task.status.as_str()
                     );
                 }
-                self.mcp_transition_to_review(&mut task)?;
+                self.transition_to_review(&mut task)?;
+                task.status = TaskStatus::Review;
+                task.updated_at = chrono::Utc::now();
+                if let Some(db) = &self.state.db {
+                    db.update_task(&task)?;
+                }
+                self.refresh_tasks()?;
             }
             "move_to_done" => {
-                if task.status != TaskStatus::Review {
+                if !matches!(task.status, TaskStatus::Review | TaskStatus::PR) {
                     anyhow::bail!(
-                        "Task must be in Review to move to Done (current: {})",
+                        "Task must be in Review or PR to move to Done (current: {})",
                         task.status.as_str()
                     );
                 }
                 self.force_move_to_done(&task.id)?;
             }
             "resume" => {
-                if task.status != TaskStatus::Review {
+                if !matches!(task.status, TaskStatus::Review | TaskStatus::PR) {
                     anyhow::bail!(
-                        "Task must be in Review to resume (current: {})",
+                        "Task must be in Review or PR to resume (current: {})",
                         task.status.as_str()
                     );
                 }
@@ -5190,7 +4639,8 @@ impl App {
             TaskStatus::Backlog => TaskStatus::Planning,
             TaskStatus::Planning => TaskStatus::Running,
             TaskStatus::Running => TaskStatus::Review,
-            TaskStatus::Review => TaskStatus::Done,
+            TaskStatus::Review => TaskStatus::PR,
+            TaskStatus::PR => TaskStatus::Done,
             TaskStatus::Done => anyhow::bail!("Task is already Done"),
         };
 
@@ -5203,11 +4653,9 @@ impl App {
                 self.transition_to_planning(task, project_path)?
             }
             (TaskStatus::Planning, TaskStatus::Running) => self.transition_to_running(task)?,
-            (TaskStatus::Running, TaskStatus::Review) => {
-                self.mcp_transition_to_review(task)?;
-                return Ok(());
-            }
-            (TaskStatus::Review, TaskStatus::Done) => {
+            (TaskStatus::Running, TaskStatus::Review) => self.transition_to_review(task)?,
+            (TaskStatus::Review, TaskStatus::PR) => self.transition_to_pr(task)?,
+            (TaskStatus::PR, TaskStatus::Done) => {
                 self.force_move_to_done(&task.id)?;
                 return Ok(());
             }
@@ -5225,41 +4673,6 @@ impl App {
         Ok(())
     }
 
-    /// MCP version of transition_to_review: sends review prompt but skips PR popup.
-    fn mcp_transition_to_review(&mut self, task: &mut Task) -> Result<()> {
-        let (review_agent, agent_switch) = needs_agent_switch(&self.state.config, task, "review");
-        if let Some(session_name) = &task.session_name {
-            let plugin = self.load_task_plugin(task);
-            let task_content = task.content_text();
-            let skill_cmd =
-                resolve_skill_command(&plugin, "review", &review_agent, &task_content, task.cycle);
-            let prompt = resolve_prompt(&plugin, "review", &task_content, &task.id, task.cycle);
-            let prompt_trigger = resolve_prompt_trigger(&plugin, "review");
-            let auto_dismiss = plugin
-                .as_ref()
-                .map_or_else(Vec::new, |p| p.auto_dismiss.clone());
-            spawn_send_to_agent(
-                Arc::clone(&self.state.tmux_ops),
-                Arc::clone(&self.state.agent_registry),
-                session_name.clone(),
-                task.agent.clone(),
-                review_agent.clone(),
-                agent_switch,
-                skill_cmd,
-                prompt,
-                prompt_trigger,
-                task_content,
-                auto_dismiss,
-            );
-        }
-        task.agent = review_agent;
-        task.status = TaskStatus::Review;
-        task.updated_at = chrono::Utc::now();
-        if let Some(db) = &self.state.db {
-            db.update_task(task)?;
-        }
-        Ok(())
-    }
 
     /// Toggle orchestrator agent: spawn if not running, view if running.
     fn toggle_orchestrator(&mut self) -> Result<()> {
@@ -5581,7 +4994,7 @@ impl App {
             .filter(|t| {
                 matches!(
                     t.status,
-                    TaskStatus::Planning | TaskStatus::Running | TaskStatus::Review
+                    TaskStatus::Planning | TaskStatus::Running | TaskStatus::Review | TaskStatus::PR
                 ) || (t.status == TaskStatus::Backlog && t.session_name.is_some())
             })
             .filter(|t| t.worktree_path.is_some() || t.session_name.is_some())
@@ -5797,8 +5210,8 @@ impl App {
                 }
             }
 
-            // Auto merge-conflict check for Review tasks
-            if task_status.status == TaskStatus::Review
+            // Auto merge-conflict check for PR tasks (before creating the PR)
+            if task_status.status == TaskStatus::PR
                 && !self
                     .state
                     .merge_conflict_checked
@@ -6493,123 +5906,6 @@ fn capture_tmux_pane_with_history(
 }
 
 /// Generate PR title and description using the configured agent
-pub(crate) fn generate_pr_description(
-    task_title: &str,
-    worktree_path: Option<&str>,
-    _branch_name: Option<&str>,
-    git_ops: &dyn GitOperations,
-    agent_ops: &dyn AgentOperations,
-) -> (String, String) {
-    // Default values
-    let default_title = task_title.to_string();
-    let mut default_body = String::new();
-
-    // Try to get git diff for context
-    if let Some(worktree) = worktree_path {
-        let worktree_path = Path::new(worktree);
-        // Get diff from main
-        let diff_stat = git_ops.diff_stat_from_main(worktree_path);
-
-        if !diff_stat.is_empty() {
-            default_body.push_str("## Changes\n```\n");
-            default_body.push_str(&diff_stat);
-            default_body.push_str("```\n");
-        }
-
-        // Try to use the agent to generate a better description
-        let prompt = format!(
-            "Generate a concise PR description for these changes. Task: '{}'. Output only the description, no markdown code blocks around it. Keep it brief (2-3 sentences max).",
-            task_title
-        );
-
-        if let Ok(generated) = agent_ops.generate_text(worktree_path, &prompt) {
-            if !generated.is_empty() {
-                default_body = format!("{}\n\n{}", generated, default_body);
-            }
-        }
-    }
-
-    (default_title, default_body)
-}
-
-/// Create a PR with provided title and body, return (pr_number, pr_url)
-fn create_pr_with_content(
-    task: &Task,
-    project_path: &Path,
-    pr_title: &str,
-    pr_body: &str,
-    git_ops: &dyn GitOperations,
-    git_provider_ops: &dyn GitProviderOperations,
-    agent_ops: &dyn AgentOperations,
-) -> Result<(i32, String)> {
-    let worktree = task.worktree_path.as_deref().unwrap_or(".");
-    let worktree_path = Path::new(worktree);
-
-    // Stage all changes
-    git_ops.add_all(worktree_path)?;
-
-    // Check if there are changes to commit
-    let has_changes = git_ops.has_changes(worktree_path);
-
-    // Commit if there are staged changes
-    if has_changes {
-        let commit_msg = format!(
-            "{}\n\nCo-Authored-By: {}",
-            pr_title,
-            agent_ops.co_author_string()
-        );
-        git_ops.commit(worktree_path, &commit_msg)?;
-    }
-
-    // Push the branch
-    if let Some(branch) = &task.branch_name {
-        git_ops.push(worktree_path, branch, true)?;
-    }
-
-    // Create PR
-    git_provider_ops.create_pr(
-        project_path,
-        pr_title,
-        pr_body,
-        task.branch_name.as_deref().unwrap_or(""),
-    )
-}
-
-/// Push changes to an existing PR (commit and push only, no PR creation)
-fn push_changes_to_existing_pr(
-    task: &Task,
-    git_ops: &dyn GitOperations,
-    agent_ops: &dyn AgentOperations,
-) -> Result<String> {
-    let worktree = task.worktree_path.as_deref().unwrap_or(".");
-    let worktree_path = Path::new(worktree);
-
-    // Stage all changes
-    git_ops.add_all(worktree_path)?;
-
-    // Check if there are changes to commit
-    let has_changes = git_ops.has_changes(worktree_path);
-
-    // Commit if there are staged changes
-    if has_changes {
-        let commit_msg = format!(
-            "Address review comments\n\nCo-Authored-By: {}",
-            agent_ops.co_author_string()
-        );
-        git_ops.commit(worktree_path, &commit_msg)?;
-    }
-
-    // Push the branch
-    if let Some(branch) = &task.branch_name {
-        git_ops.push(worktree_path, branch, false)?;
-    }
-
-    // Return the existing PR URL
-    Ok(task
-        .pr_url
-        .clone()
-        .unwrap_or_else(|| "Changes pushed to existing PR".to_string()))
-}
 
 /// Send a key to a tmux pane
 fn send_key_to_tmux(window_name: &str, key: KeyCode, tmux_ops: &dyn TmuxOperations) {
@@ -7283,6 +6579,7 @@ fn phase_artifact_exists(
         TaskStatus::Planning => p.artifacts.planning.as_deref(),
         TaskStatus::Running => p.artifacts.running.as_deref(),
         TaskStatus::Review => p.artifacts.review.as_deref(),
+        TaskStatus::PR => p.artifacts.pr.as_deref(),
         _ => None,
     });
 
@@ -7344,6 +6641,7 @@ fn determine_phase_variant(
             // Phases without variants leak the &str — use a known static
             match phase {
                 "review" => "review",
+                "pr" => "pr",
                 "research" => "research",
                 _ => "running",
             }
@@ -7426,7 +6724,7 @@ fn needs_agent_switch(config: &MergedConfig, task: &Task, phase: &str) -> (Strin
 /// Used to deploy skills for all agents that might be used during a task's lifecycle.
 fn collect_phase_agents(config: &MergedConfig) -> Vec<String> {
     let mut agents: Vec<String> = vec![config.default_agent.clone()];
-    for phase in &["research", "planning", "running", "review"] {
+    for phase in &["research", "planning", "running", "review", "pr"] {
         let agent = config.agent_for_phase(phase).to_string();
         if !agents.contains(&agent) {
             agents.push(agent);

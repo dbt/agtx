@@ -8,6 +8,7 @@ fn test_task_status_as_str() {
     assert_eq!(TaskStatus::Planning.as_str(), "planning");
     assert_eq!(TaskStatus::Running.as_str(), "running");
     assert_eq!(TaskStatus::Review.as_str(), "review");
+    assert_eq!(TaskStatus::PR.as_str(), "pr");
     assert_eq!(TaskStatus::Done.as_str(), "done");
 }
 
@@ -17,6 +18,7 @@ fn test_task_status_from_str() {
     assert_eq!(TaskStatus::from_str("planning"), Some(TaskStatus::Planning));
     assert_eq!(TaskStatus::from_str("running"), Some(TaskStatus::Running));
     assert_eq!(TaskStatus::from_str("review"), Some(TaskStatus::Review));
+    assert_eq!(TaskStatus::from_str("pr"), Some(TaskStatus::PR));
     assert_eq!(TaskStatus::from_str("done"), Some(TaskStatus::Done));
     assert_eq!(TaskStatus::from_str("invalid"), None);
     assert_eq!(TaskStatus::from_str(""), None);
@@ -25,12 +27,13 @@ fn test_task_status_from_str() {
 #[test]
 fn test_task_status_columns() {
     let columns = TaskStatus::columns();
-    assert_eq!(columns.len(), 5);
+    assert_eq!(columns.len(), 6);
     assert_eq!(columns[0], TaskStatus::Backlog);
     assert_eq!(columns[1], TaskStatus::Planning);
     assert_eq!(columns[2], TaskStatus::Running);
     assert_eq!(columns[3], TaskStatus::Review);
-    assert_eq!(columns[4], TaskStatus::Done);
+    assert_eq!(columns[4], TaskStatus::PR);
+    assert_eq!(columns[5], TaskStatus::Done);
 }
 
 #[test]

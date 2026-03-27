@@ -9,6 +9,7 @@ pub enum TaskStatus {
     Planning,
     Running,
     Review,
+    PR,
     Done,
 }
 
@@ -19,6 +20,7 @@ impl TaskStatus {
             TaskStatus::Planning => "planning",
             TaskStatus::Running => "running",
             TaskStatus::Review => "review",
+            TaskStatus::PR => "pr",
             TaskStatus::Done => "done",
         }
     }
@@ -29,6 +31,7 @@ impl TaskStatus {
             TaskStatus::Planning => "planning",
             TaskStatus::Running => "running",
             TaskStatus::Review => "review",
+            TaskStatus::PR => "pr",
             TaskStatus::Done => "done",
         }
     }
@@ -39,6 +42,7 @@ impl TaskStatus {
             "planning" => Some(TaskStatus::Planning),
             "running" => Some(TaskStatus::Running),
             "review" => Some(TaskStatus::Review),
+            "pr" => Some(TaskStatus::PR),
             "done" => Some(TaskStatus::Done),
             _ => None,
         }
@@ -50,6 +54,7 @@ impl TaskStatus {
             TaskStatus::Planning,
             TaskStatus::Running,
             TaskStatus::Review,
+            TaskStatus::PR,
             TaskStatus::Done,
         ]
     }

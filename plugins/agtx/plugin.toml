@@ -6,9 +6,11 @@ research = ".agtx/research.md"
 planning = ".agtx/plan.md"
 running = ".agtx/execute.md"
 review = ".agtx/review.md"
+pr = ".agtx/pr.md"
 
 [commands]
 research = "/agtx:research {task}"
 planning = "/agtx:plan {task}"
 running = "/agtx:execute {task}"
 review = "/agtx:review"
+pr = "/agtx:pr"
