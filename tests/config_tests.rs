@@ -184,6 +184,7 @@ fn test_agent_for_phase_all_defaults() {
     assert_eq!(config.agent_for_phase("planning"), "claude");
     assert_eq!(config.agent_for_phase("running"), "claude");
     assert_eq!(config.agent_for_phase("review"), "claude");
+    assert_eq!(config.agent_for_phase("pr"), "claude");
     assert_eq!(config.agent_for_phase("unknown"), "claude");
 }
 

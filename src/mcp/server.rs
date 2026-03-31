@@ -230,6 +230,10 @@ impl AgtxMcpServer {
                 actions.push("escalate_to_user".to_string());
             }
             TaskStatus::Review => {
+                actions.push("move_forward".to_string());
+                actions.push("resume".to_string());
+            }
+            TaskStatus::PR => {
                 actions.push("move_to_done".to_string());
                 actions.push("resume".to_string());
             }

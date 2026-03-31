@@ -31,7 +31,7 @@ fn test_board_state_default() {
 fn test_tasks_in_column_empty() {
     let board = BoardState::new();
 
-    for i in 0..5 {
+    for i in 0..6 {
         assert!(board.tasks_in_column(i).is_empty());
     }
 }
@@ -50,7 +50,8 @@ fn test_tasks_in_column_with_tasks() {
     assert_eq!(board.tasks_in_column(1).len(), 0); // Planning
     assert_eq!(board.tasks_in_column(2).len(), 1); // Running
     assert_eq!(board.tasks_in_column(3).len(), 0); // Review
-    assert_eq!(board.tasks_in_column(4).len(), 1); // Done
+    assert_eq!(board.tasks_in_column(4).len(), 0); // PR
+    assert_eq!(board.tasks_in_column(5).len(), 1); // Done
 }
 
 #[test]
@@ -114,9 +115,12 @@ fn test_move_right() {
     board.move_right();
     assert_eq!(board.selected_column, 4);
 
+    board.move_right();
+    assert_eq!(board.selected_column, 5);
+
     // Should not go beyond last column
     board.move_right();
-    assert_eq!(board.selected_column, 4);
+    assert_eq!(board.selected_column, 5);
 }
 
 #[test]

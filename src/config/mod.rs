@@ -20,6 +20,10 @@ pub struct GlobalConfig {
     /// UI theme/colors
     #[serde(default)]
     pub theme: ThemeConfig,
+
+    /// Enable emacs-style keybindings in text inputs (Ctrl+A/E/B/F/D/K/U/W)
+    #[serde(default)]
+    pub emacs_bindings: bool,
 }
 
 impl Default for GlobalConfig {
@@ -29,6 +33,7 @@ impl Default for GlobalConfig {
             agents: PhaseAgentsConfig::default(),
             worktree: WorktreeConfig::default(),
             theme: ThemeConfig::default(),
+            emacs_bindings: false,
         }
     }
 }
@@ -150,6 +155,7 @@ pub struct PhaseAgentsConfig {
     pub planning: Option<String>,
     pub running: Option<String>,
     pub review: Option<String>,
+    pub pr: Option<String>,
 }
 
 /// Worktree configuration
@@ -348,6 +354,7 @@ pub struct MergedConfig {
     pub copy_files: Option<String>,
     pub init_script: Option<String>,
     pub workflow_plugin: Option<String>,
+    pub emacs_bindings: bool,
 }
 
 impl MergedConfig {
@@ -364,6 +371,7 @@ impl MergedConfig {
                 planning: project_agents.planning.or(global.agents.planning.clone()),
                 running: project_agents.running.or(global.agents.running.clone()),
                 review: project_agents.review.or(global.agents.review.clone()),
+                pr: project_agents.pr.or(global.agents.pr.clone()),
             },
             worktree_enabled: global.worktree.enabled,
             auto_cleanup: global.worktree.auto_cleanup,
@@ -377,6 +385,7 @@ impl MergedConfig {
             copy_files: project.copy_files.clone(),
             init_script: project.init_script.clone(),
             workflow_plugin: project.workflow_plugin.clone(),
+            emacs_bindings: global.emacs_bindings,
         }
     }
 
@@ -395,6 +404,7 @@ impl MergedConfig {
             "planning" | "planning_with_research" => self.phase_agents.planning.as_deref(),
             "running" | "running_with_research_or_planning" => self.phase_agents.running.as_deref(),
             "review" => self.phase_agents.review.as_deref(),
+            "pr" => self.phase_agents.pr.as_deref(),
             _ => None,
         }
     }
@@ -457,6 +467,7 @@ pub struct PluginArtifacts {
     pub planning: Option<String>,
     pub running: Option<String>,
     pub review: Option<String>,
+    pub pr: Option<String>,
 }
 
 /// Slash commands to invoke per phase (sent via tmux send_keys as real interactive commands).
@@ -471,6 +482,7 @@ pub struct PluginCommands {
     pub planning: Option<String>,
     pub running: Option<String>,
     pub review: Option<String>,
+    pub pr: Option<String>,
 }
 
 /// Task content prompts per phase (sent after the command).
@@ -484,6 +496,7 @@ pub struct PluginPrompts {
     /// Prompt for Running after research or planning. Usually empty — prior phase provides context.
     pub running_with_research_or_planning: Option<String>,
     pub review: Option<String>,
+    pub pr: Option<String>,
 }
 
 /// Text patterns to wait for before sending the prompt for each phase.
@@ -495,6 +508,7 @@ pub struct PluginPromptTriggers {
     pub planning: Option<String>,
     pub running: Option<String>,
     pub review: Option<String>,
+    pub pr: Option<String>,
 }
 
 impl WorkflowPlugin {
