@@ -2,14 +2,13 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Directory name for agtx data within a project
-const AGTX_DIR: &str = ".agtx";
-const WORKTREES_DIR: &str = "worktrees";
+/// Default worktree directory relative to project root
+pub const DEFAULT_WORKTREE_DIR: &str = ".agtx/worktrees";
 
 /// Create a new git worktree for a task from the detected default branch.
 pub fn create_worktree(project_path: &Path, task_slug: &str) -> Result<PathBuf> {
     let base_branch = detect_main_branch(project_path)?;
-    create_worktree_from_base(project_path, task_slug, &base_branch)
+    create_worktree_from_base(project_path, task_slug, &base_branch, DEFAULT_WORKTREE_DIR)
 }
 
 /// Create a new git worktree for a task from the specified base branch.
@@ -17,10 +16,10 @@ pub fn create_worktree_from_base(
     project_path: &Path,
     task_slug: &str,
     base_branch: &str,
+    worktree_dir: &str,
 ) -> Result<PathBuf> {
     let worktree_path = project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
+        .join(worktree_dir)
         .join(task_slug);
 
     // If worktree already exists and is valid, return it
@@ -274,17 +273,14 @@ pub fn detect_main_branch(project_path: &Path) -> Result<String> {
 }
 
 /// Remove a git worktree
-pub fn remove_worktree(project_path: &Path, task_id: &str) -> Result<()> {
-    let worktree_path = project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
-        .join(task_id);
+pub fn remove_worktree(project_path: &Path, task_id: &str, worktree_dir: &str) -> Result<()> {
+    let wt_path = worktree_path(project_path, task_id, worktree_dir);
 
     // Remove the worktree
     let output = Command::new("git")
         .current_dir(project_path)
         .args(["worktree", "remove"])
-        .arg(&worktree_path)
+        .arg(&wt_path)
         .args(["--force"]) // Force in case of uncommitted changes
         .output()
         .context("Failed to remove git worktree")?;
@@ -301,16 +297,23 @@ pub fn remove_worktree(project_path: &Path, task_id: &str) -> Result<()> {
 }
 
 /// Get the worktree path for a task
-pub fn worktree_path(project_path: &Path, task_id: &str) -> PathBuf {
-    project_path
-        .join(AGTX_DIR)
-        .join(WORKTREES_DIR)
-        .join(task_id)
+pub fn worktree_path(project_path: &Path, task_id: &str, worktree_dir: &str) -> PathBuf {
+    project_path.join(worktree_dir).join(task_id)
+}
+
+/// Get the worktree path for a task using a custom worktree directory
+pub fn worktree_path_with_dir(project_path: &Path, task_id: &str, worktree_dir: &str) -> PathBuf {
+    worktree_path(project_path, task_id, worktree_dir)
 }
 
 /// Check if a worktree exists for a task
 pub fn worktree_exists(project_path: &Path, task_id: &str) -> bool {
-    worktree_path(project_path, task_id).exists()
+    worktree_path(project_path, task_id, DEFAULT_WORKTREE_DIR).exists()
+}
+
+/// Check if a worktree exists for a task using a custom worktree directory
+pub fn worktree_exists_with_dir(project_path: &Path, task_id: &str, worktree_dir: &str) -> bool {
+    worktree_path_with_dir(project_path, task_id, worktree_dir).exists()
 }
 
 #[cfg(test)]

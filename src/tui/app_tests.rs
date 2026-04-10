@@ -1403,7 +1403,7 @@ fn test_setup_task_worktree_success() {
     // Expect worktree creation
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
 
     // Expect worktree initialization
     mock_git
@@ -1431,6 +1431,7 @@ fn test_setup_task_worktree_success() {
         "my-project",
         "implement this",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1463,7 +1464,7 @@ fn test_setup_task_worktree_sets_task_fields() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1483,6 +1484,7 @@ fn test_setup_task_worktree_sets_task_fields() {
         "my-project",
         "fix the bug",
         "main",
+        ".agtx/worktrees",
         Some("CLAUDE.md".to_string()),
         Some("./init.sh".to_string()),
         &None,
@@ -1521,7 +1523,7 @@ fn test_setup_task_worktree_worktree_creation_fails() {
     // Worktree creation fails
     mock_git
         .expect_create_worktree()
-        .returning(|_, _, _| Err(anyhow::anyhow!("worktree already exists")));
+        .returning(|_, _, _, _| Err(anyhow::anyhow!("worktree already exists")));
 
     // Should still initialize and create window with fallback path
     mock_git
@@ -1543,6 +1545,7 @@ fn test_setup_task_worktree_worktree_creation_fails() {
         "my-project",
         "do something",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1576,7 +1579,7 @@ fn test_setup_task_worktree_tmux_window_fails() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1598,6 +1601,7 @@ fn test_setup_task_worktree_tmux_window_fails() {
         "my-project",
         "do something",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1626,7 +1630,7 @@ fn test_setup_task_worktree_creates_session_when_missing() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1649,6 +1653,7 @@ fn test_setup_task_worktree_creates_session_when_missing() {
         "my-project",
         "do work",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1675,8 +1680,8 @@ fn test_setup_task_worktree_passes_init_config() {
 
     mock_git
         .expect_create_worktree()
-        .withf(|_, _, base_branch| base_branch == "development")
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .withf(|_, _, base_branch, _| base_branch == "development")
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
 
     // Verify copy_files and init_script are passed through
     mock_git
@@ -1703,6 +1708,7 @@ fn test_setup_task_worktree_passes_init_config() {
         "my-project",
         "implement feature",
         "development",
+        ".agtx/worktrees",
         Some("CLAUDE.md,.env".to_string()),
         Some("./setup.sh".to_string()),
         &None,
