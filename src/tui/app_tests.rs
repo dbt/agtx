@@ -208,6 +208,7 @@ fn test_create_pr_with_content_success() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -303,6 +304,7 @@ fn test_create_pr_with_content_no_changes() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -357,6 +359,7 @@ fn test_create_pr_with_content_push_failure() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -417,6 +420,7 @@ fn test_push_changes_to_existing_pr_success() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -471,6 +475,7 @@ fn test_push_changes_to_existing_pr_no_changes() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -508,6 +513,7 @@ fn test_push_changes_to_existing_pr_no_url() {
         cycle: 1,
         referenced_tasks: None,
         escalation_note: None,
+        base_branch: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -930,7 +936,6 @@ fn test_cleanup_task_for_done_with_resources() {
         Path::new("/project"),
         &mock_tmux,
         &mock_git,
-        false,
     );
 
     assert!(task.session_name.is_none());
@@ -957,7 +962,6 @@ fn test_cleanup_task_for_done_no_resources() {
         Path::new("/project"),
         &mock_tmux,
         &mock_git,
-        false,
     );
 
     assert_eq!(task.status, TaskStatus::Done);
@@ -1007,9 +1011,7 @@ fn test_delete_task_resources_full_cleanup() {
         Path::new("/project"),
         &mock_tmux,
         &mock_git,
-        false,
-    )
-    .unwrap();
+    );
 }
 
 /// Test delete_task_resources handles task without resources
@@ -1031,9 +1033,7 @@ fn test_delete_task_resources_no_resources() {
         Path::new("/project"),
         &mock_tmux,
         &mock_git,
-        false,
-    )
-    .unwrap();
+    );
 }
 
 // =============================================================================
@@ -1324,7 +1324,7 @@ fn test_word_boundary_roundtrip() {
 
 #[test]
 fn test_footer_text_sidebar_focused() {
-    let text = build_footer_text(InputMode::Normal, true, 0, false);
+    let text = build_footer_text(InputMode::Normal, true, 0, false, false);
     assert!(text.contains("[j/k] navigate"));
     assert!(text.contains("[e] hide sidebar"));
     assert!(!text.contains("[o] new"));
@@ -1332,7 +1332,7 @@ fn test_footer_text_sidebar_focused() {
 
 #[test]
 fn test_footer_text_backlog_column() {
-    let text = build_footer_text(InputMode::Normal, false, 0, false);
+    let text = build_footer_text(InputMode::Normal, false, 0, false, false);
     assert!(text.contains("[M] run"));
     assert!(text.contains("[m] plan"));
     assert!(!text.contains("[r] move left"));
@@ -1340,7 +1340,7 @@ fn test_footer_text_backlog_column() {
 
 #[test]
 fn test_footer_text_planning_column() {
-    let text = build_footer_text(InputMode::Normal, false, 1, false);
+    let text = build_footer_text(InputMode::Normal, false, 1, false, false);
     assert!(text.contains("[m] run"));
     assert!(!text.contains("[M] run"));
     assert!(!text.contains("[r] move left"));
@@ -1348,21 +1348,35 @@ fn test_footer_text_planning_column() {
 
 #[test]
 fn test_footer_text_running_column() {
-    let text = build_footer_text(InputMode::Normal, false, 2, false);
+    let text = build_footer_text(InputMode::Normal, false, 2, false, false);
     assert!(text.contains("[r] move left"));
     assert!(text.contains("[m] move"));
 }
 
 #[test]
+fn test_footer_text_fullscreen_on_enter_hides_ctrl_f() {
+    // Columns 1-3 should hide [C-f] when fullscreen_on_enter is true
+    for col in 1..=3 {
+        let text = build_footer_text(InputMode::Normal, false, col, false, true);
+        assert!(!text.contains("[C-f]"), "Column {} should hide [C-f] when fullscreen_on_enter=true", col);
+    }
+    // And show it when false
+    for col in 1..=3 {
+        let text = build_footer_text(InputMode::Normal, false, col, false, false);
+        assert!(text.contains("[C-f]"), "Column {} should show [C-f] when fullscreen_on_enter=false", col);
+    }
+}
+
+#[test]
 fn test_footer_text_review_column() {
-    let text = build_footer_text(InputMode::Normal, false, 3, false);
+    let text = build_footer_text(InputMode::Normal, false, 3, false, false);
     assert!(text.contains("[r] move left"));
     assert!(text.contains("[m] move"));
 }
 
 #[test]
 fn test_footer_text_review_column_cyclic() {
-    let text = build_footer_text(InputMode::Normal, false, 3, true);
+    let text = build_footer_text(InputMode::Normal, false, 3, true, false);
     assert!(text.contains("[p] next phase"));
     assert!(text.contains("[r] resume"));
     assert!(text.contains("[m] done"));
@@ -1370,7 +1384,7 @@ fn test_footer_text_review_column_cyclic() {
 
 #[test]
 fn test_footer_text_done_column() {
-    let text = build_footer_text(InputMode::Normal, false, 4, false);
+    let text = build_footer_text(InputMode::Normal, false, 4, false, false);
     assert!(!text.contains("[m] move"));
     assert!(!text.contains("[r]"));
     assert!(!text.contains("[d] diff"));
@@ -1378,14 +1392,14 @@ fn test_footer_text_done_column() {
 
 #[test]
 fn test_footer_text_input_title() {
-    let text = build_footer_text(InputMode::InputTitle, false, 0, false);
+    let text = build_footer_text(InputMode::InputTitle, false, 0, false, false);
     assert!(text.contains("Enter task title"));
     assert!(text.contains("[Esc] cancel"));
 }
 
 #[test]
 fn test_footer_text_input_description() {
-    let text = build_footer_text(InputMode::InputDescription, false, 0, false);
+    let text = build_footer_text(InputMode::InputDescription, false, 0, false, false);
     assert!(text.contains("[#] files"));
     assert!(text.contains("[/] skills"));
     assert!(text.contains("[!] tasks"));
@@ -1409,7 +1423,7 @@ fn test_setup_task_worktree_success() {
     // Expect worktree creation
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
 
     // Expect worktree initialization
     mock_git
@@ -1437,6 +1451,7 @@ fn test_setup_task_worktree_success() {
         "my-project",
         "implement this",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1469,7 +1484,7 @@ fn test_setup_task_worktree_sets_task_fields() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1489,6 +1504,7 @@ fn test_setup_task_worktree_sets_task_fields() {
         "my-project",
         "fix the bug",
         "main",
+        ".agtx/worktrees",
         Some("CLAUDE.md".to_string()),
         Some("./init.sh".to_string()),
         &None,
@@ -1527,7 +1543,7 @@ fn test_setup_task_worktree_worktree_creation_fails() {
     // Worktree creation fails
     mock_git
         .expect_create_worktree()
-        .returning(|_, _, _| Err(anyhow::anyhow!("worktree already exists")));
+        .returning(|_, _, _, _| Err(anyhow::anyhow!("worktree already exists")));
 
     // Should still initialize and create window with fallback path
     mock_git
@@ -1549,6 +1565,7 @@ fn test_setup_task_worktree_worktree_creation_fails() {
         "my-project",
         "do something",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1582,7 +1599,7 @@ fn test_setup_task_worktree_tmux_window_fails() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1604,6 +1621,7 @@ fn test_setup_task_worktree_tmux_window_fails() {
         "my-project",
         "do something",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1632,7 +1650,7 @@ fn test_setup_task_worktree_creates_session_when_missing() {
 
     mock_git
         .expect_create_worktree()
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
     mock_git
         .expect_initialize_worktree()
         .returning(|_, _, _, _, _| vec![]);
@@ -1655,6 +1673,7 @@ fn test_setup_task_worktree_creates_session_when_missing() {
         "my-project",
         "do work",
         "main",
+        ".agtx/worktrees",
         None,
         None,
         &None,
@@ -1681,8 +1700,8 @@ fn test_setup_task_worktree_passes_init_config() {
 
     mock_git
         .expect_create_worktree()
-        .withf(|_, _, base_branch| base_branch == "development")
-        .returning(|_, slug, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
+        .withf(|_, _, base_branch, _| base_branch == "development")
+        .returning(|_, slug, _, _| Ok(format!("/project/.agtx/worktrees/{}", slug)));
 
     // Verify copy_files and init_script are passed through
     mock_git
@@ -1709,6 +1728,7 @@ fn test_setup_task_worktree_passes_init_config() {
         "my-project",
         "implement feature",
         "development",
+        ".agtx/worktrees",
         Some("CLAUDE.md,.env".to_string()),
         Some("./setup.sh".to_string()),
         &None,
@@ -2422,7 +2442,7 @@ fn test_install_plugin_none_clears_config() {
 
 #[test]
 fn test_footer_text_backlog_includes_research() {
-    let text = build_footer_text(InputMode::Normal, false, 0, false);
+    let text = build_footer_text(InputMode::Normal, false, 0, false, false);
     assert!(text.contains("[R] research"));
 }
 
@@ -3148,7 +3168,7 @@ fn test_determine_phase_variant_review_passthrough() {
 
 #[test]
 fn test_footer_text_review_non_cyclic_no_next_phase() {
-    let text = build_footer_text(InputMode::Normal, false, 3, false);
+    let text = build_footer_text(InputMode::Normal, false, 3, false, false);
     assert!(!text.contains("[p] next phase"));
     assert!(text.contains("[m] move"));
 }
@@ -4332,7 +4352,7 @@ fn test_task_ref_after_space() {
 #[test]
 #[cfg(feature = "test-mocks")]
 fn test_footer_text_select_plugin() {
-    let text = build_footer_text(InputMode::SelectPlugin, false, 0, false);
+    let text = build_footer_text(InputMode::SelectPlugin, false, 0, false, false);
     assert!(text.contains("select plugin"));
     assert!(text.contains("Tab"));
     assert!(text.contains("Enter"));
@@ -4342,7 +4362,7 @@ fn test_footer_text_select_plugin() {
 #[test]
 #[cfg(feature = "test-mocks")]
 fn test_footer_text_description_shows_all_triggers() {
-    let text = build_footer_text(InputMode::InputDescription, false, 0, false);
+    let text = build_footer_text(InputMode::InputDescription, false, 0, false, false);
     assert!(
         text.contains("[#] files"),
         "Missing files trigger: {}",
@@ -7415,7 +7435,6 @@ fn test_cleanup_task_for_done_clears_session_and_worktree() {
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
     );
 
     assert_eq!(task.status, TaskStatus::Done);
@@ -7440,7 +7459,6 @@ fn test_cleanup_task_for_done_no_ops_when_no_session_or_worktree() {
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
     );
 
     assert_eq!(task.status, TaskStatus::Done);
@@ -7475,7 +7493,6 @@ fn test_cleanup_task_for_done_archives_md_files() {
         project_dir.path(),
         &mock_tmux,
         &mock_git,
-        false,
     );
 
     // Archived file should exist under .agtx/archive/my-slug/plan.md
@@ -7514,7 +7531,6 @@ fn test_cleanup_task_resources_kills_window_and_removes_worktree() {
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
     );
 }
 
@@ -7533,7 +7549,6 @@ fn test_cleanup_task_resources_noop_when_no_session_or_worktree() {
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
     );
     // No panic = correct (no mock calls made)
 }
@@ -7570,9 +7585,7 @@ fn test_delete_task_resources_kills_window_removes_worktree_and_deletes_branch()
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
-    )
-    .unwrap();
+    );
 }
 
 #[test]
@@ -7589,9 +7602,7 @@ fn test_delete_task_resources_noop_when_no_session_or_worktree() {
         Path::new("/tmp/proj"),
         &mock_tmux,
         &mock_git,
-        false,
-    )
-    .unwrap();
+    );
 }
 
 // --- save_task ---
