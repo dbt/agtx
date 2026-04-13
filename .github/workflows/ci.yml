@@ -10,6 +10,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check-no-agtx-artifacts:
+    name: No .agtx artifacts in PR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if .agtx/*.md files are tracked
+        run: |
+          files=$(git ls-files '.agtx/*.md')
+          if [ -n "$files" ]; then
+            echo "ERROR: PR contains .agtx/*.md agent artifact files that must not be merged:"
+            echo "$files"
+            exit 1
+          fi
+          echo "OK: No .agtx/*.md files found"
+
   build:
     name: Build and Test
     runs-on: ${{ matrix.os }}
